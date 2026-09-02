@@ -14,6 +14,7 @@ export interface LiveVessel {
   observedAt: string | null;
   receivedAt: string;
   qualityFlags: string[];
+  source: string | null;
 }
 
 interface LiveState {
@@ -41,6 +42,7 @@ function toLiveVessel(msg: Record<string, unknown>): LiveVessel | null {
     observedAt: (msg.observed_at as string | null) ?? null,
     receivedAt: msg.received_at as string,
     qualityFlags: (msg.quality_flags as string[]) ?? [],
+    source: (msg.source as string | null) ?? null,
   };
 }
 

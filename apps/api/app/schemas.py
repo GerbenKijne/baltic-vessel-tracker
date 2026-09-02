@@ -60,6 +60,11 @@ class WatchlistVesselOut(BaseModel):
     observed_at: Optional[datetime]
     received_at: Optional[datetime]
     freshness: Optional[str]
+    sog_kn: Optional[float]
+    cog_deg: Optional[float]
+    heading_deg: Optional[int]
+    nav_status: Optional[str]
+    quality_flags: list[str]
 
 
 class WatchlistDetailOut(BaseModel):
@@ -89,3 +94,14 @@ class TrackOut(BaseModel):
     segments: list[TrackSegmentOut]
     point_count: int
     truncated: bool
+
+
+class SourceStatusOut(BaseModel):
+    source: str
+    instance: str
+    state: str
+    last_message_at: Optional[datetime]
+    message_count: int
+    error_count: int
+    reconnect_count: int
+    error_summary: Optional[str]

@@ -35,6 +35,7 @@ async def _send_snapshot(websocket: WebSocket, bbox: Bbox) -> None:
                 Vessel.name,
                 ST_X(position_geom).label("lon"),
                 ST_Y(position_geom).label("lat"),
+                VesselLatest.provenance["source"].as_string().label("source"),
             )
             .join(Vessel, Vessel.mmsi == VesselLatest.mmsi)
             .where(ST_Within(position_geom, envelope))
@@ -45,7 +46,7 @@ async def _send_snapshot(websocket: WebSocket, bbox: Bbox) -> None:
     await websocket.send_text(
         json.dumps({"type": "snapshot.begin", "schema_version": 1, "server_time": server_time()})
     )
-    for latest, name, lon, lat in rows:
+    for latest, name, lon, lat, source in rows:
         await websocket.send_text(
             json.dumps(
                 {
@@ -63,6 +64,7 @@ async def _send_snapshot(websocket: WebSocket, bbox: Bbox) -> None:
                     "received_at": latest.received_at.isoformat(),
                     "freshness": freshness_for(latest.observed_at, latest.received_at),
                     "quality_flags": latest.quality_flags,
+                    "source": source,
                 }
             )
         )

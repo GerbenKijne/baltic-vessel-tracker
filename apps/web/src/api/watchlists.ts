@@ -17,6 +17,11 @@ export interface WatchlistVessel {
   observed_at: string | null;
   received_at: string | null;
   freshness: string | null;
+  sog_kn: number | null;
+  cog_deg: number | null;
+  heading_deg: number | null;
+  nav_status: string | null;
+  quality_flags: string[];
 }
 
 export interface WatchlistDetail {

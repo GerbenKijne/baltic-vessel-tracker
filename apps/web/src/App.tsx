@@ -1,32 +1,58 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 
+import { AuthProvider } from "./AuthContext";
 import { api } from "./api/client";
-import { ComingSoonPage } from "./pages/ComingSoonPage";
+import { AdminPage } from "./pages/AdminPage";
+import { AlertsPage } from "./pages/AlertsPage";
+import { HistoryPage } from "./pages/HistoryPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MapPage } from "./pages/MapPage";
 import { WatchlistsPage } from "./pages/WatchlistsPage";
 
+const SECTIONS = [
+  { to: "/map", code: "MA", label: "Map" },
+  { to: "/watchlists", code: "WL", label: "Watchlists" },
+  { to: "/alerts", code: "AL", label: "Alerts" },
+  { to: "/history", code: "HI", label: "History" },
+];
+
 function AppShell({ onLogout }: { onLogout: () => void }) {
   return (
-    <div className="app-shell">
-      <nav className="app-nav">
-        <NavLink to="/map">Map</NavLink>
-        <NavLink to="/watchlists">Watchlists</NavLink>
-        <NavLink to="/alerts">Alerts</NavLink>
-        <NavLink to="/history">History</NavLink>
-        <NavLink to="/admin">Admin</NavLink>
-        <button className="logout-button" onClick={onLogout}>
-          Log out
+    <div className="app">
+      <nav className="nav" aria-label="Sections">
+        <div className="brand mono">BVT</div>
+        {SECTIONS.map((s) => (
+          <NavLink
+            key={s.to}
+            to={s.to}
+            title={s.label}
+            aria-label={s.label}
+            className={({ isActive }) => (isActive ? "on" : undefined)}
+          >
+            <span>{s.code}</span>
+          </NavLink>
+        ))}
+        <div className="sp" />
+        <NavLink
+          to="/admin"
+          title="Admin"
+          aria-label="Admin"
+          className={({ isActive }) => (isActive ? "on" : undefined)}
+        >
+          <span>AD</span>
+        </NavLink>
+        <button className="navlink" title="Sign out" aria-label="Sign out" onClick={onLogout}>
+          <span>⏻</span>
         </button>
       </nav>
-      <div className="app-content">
+      <div className="main">
         <Routes>
           <Route path="/map" element={<MapPage />} />
           <Route path="/watchlists" element={<WatchlistsPage />} />
-          <Route path="/alerts" element={<ComingSoonPage title="Alerts" />} />
-          <Route path="/history" element={<ComingSoonPage title="History" />} />
-          <Route path="/admin" element={<ComingSoonPage title="Admin" />} />
+          <Route path="/alerts" element={<AlertsPage />} />
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/admin" element={<AdminPage />} />
           <Route path="*" element={<Navigate to="/map" replace />} />
         </Routes>
       </div>
@@ -48,7 +74,7 @@ export function App() {
   }
 
   if (isLoading) {
-    return <div className="loading-screen">Loading...</div>;
+    return <div className="loading-screen">Loading…</div>;
   }
 
   if (!user) {
@@ -64,5 +90,9 @@ export function App() {
     );
   }
 
-  return <AppShell onLogout={handleLogout} />;
+  return (
+    <AuthProvider value={{ email: user.email, logout: handleLogout }}>
+      <AppShell onLogout={handleLogout} />
+    </AuthProvider>
+  );
 }

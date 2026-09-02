@@ -97,6 +97,11 @@ async def get_watchlist(
             ST_Y(position_geom).label("lat"),
             VesselLatest.observed_at,
             VesselLatest.received_at,
+            VesselLatest.sog_kn,
+            VesselLatest.cog_deg,
+            VesselLatest.heading_deg,
+            VesselLatest.nav_status,
+            VesselLatest.quality_flags,
         )
         .join(Vessel, Vessel.mmsi == WatchlistVessel.mmsi)
         .outerjoin(VesselLatest, VesselLatest.mmsi == WatchlistVessel.mmsi)
@@ -105,20 +110,28 @@ async def get_watchlist(
     )
     rows = (await db.execute(query)).all()
 
-    vessels = [
-        WatchlistVesselOut(
-            mmsi=wv.mmsi,
-            name=name,
-            note=wv.note,
-            added_at=wv.added_at,
-            lon=lon,
-            lat=lat,
-            observed_at=observed_at,
-            received_at=received_at,
-            freshness=freshness_for(observed_at, received_at) if received_at else None,
+    vessels = []
+    for row in rows:
+        wv, name, lon, lat, observed_at, received_at = row[:6]
+        sog_kn, cog_deg, heading_deg, nav_status, quality_flags = row[6:]
+        vessels.append(
+            WatchlistVesselOut(
+                mmsi=wv.mmsi,
+                name=name,
+                note=wv.note,
+                added_at=wv.added_at,
+                lon=lon,
+                lat=lat,
+                observed_at=observed_at,
+                received_at=received_at,
+                freshness=freshness_for(observed_at, received_at) if received_at else None,
+                sog_kn=float(sog_kn) if sog_kn is not None else None,
+                cog_deg=float(cog_deg) if cog_deg is not None else None,
+                heading_deg=heading_deg,
+                nav_status=nav_status,
+                quality_flags=quality_flags or [],
+            )
         )
-        for wv, name, lon, lat, observed_at, received_at in rows
-    ]
 
     return WatchlistDetailOut(
         id=str(watchlist.id), name=watchlist.name, created_at=watchlist.created_at, vessels=vessels

@@ -52,7 +52,7 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
             {error}
           </p>
         )}
-        <button type="submit" disabled={submitting}>
+        <button className="btn pri" type="submit" disabled={submitting}>
           {submitting ? "Signing in..." : "Sign in"}
         </button>
       </form>
