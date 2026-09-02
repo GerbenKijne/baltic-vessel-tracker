@@ -5,6 +5,7 @@ import { api } from "./api/client";
 import { ComingSoonPage } from "./pages/ComingSoonPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MapPage } from "./pages/MapPage";
+import { WatchlistsPage } from "./pages/WatchlistsPage";
 
 function AppShell({ onLogout }: { onLogout: () => void }) {
   return (
@@ -22,7 +23,7 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
       <div className="app-content">
         <Routes>
           <Route path="/map" element={<MapPage />} />
-          <Route path="/watchlists" element={<ComingSoonPage title="Watchlists" />} />
+          <Route path="/watchlists" element={<WatchlistsPage />} />
           <Route path="/alerts" element={<ComingSoonPage title="Alerts" />} />
           <Route path="/history" element={<ComingSoonPage title="History" />} />
           <Route path="/admin" element={<ComingSoonPage title="Admin" />} />

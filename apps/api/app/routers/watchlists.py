@@ -1,0 +1,211 @@
+import uuid
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from geoalchemy2 import Geometry
+from geoalchemy2.functions import ST_X, ST_Y
+from sqlalchemy import cast, delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..db import get_db
+from ..deps import get_current_user, require_csrf
+from ..models import User, Vessel, VesselLatest, Watchlist, WatchlistVessel
+from ..routers.vessels import freshness_for
+from ..schemas import (
+    WatchlistCreate,
+    WatchlistDetailOut,
+    WatchlistOut,
+    WatchlistRename,
+    WatchlistVesselOut,
+)
+
+router = APIRouter(prefix="/api/v1/watchlists", tags=["watchlists"])
+
+
+async def _get_owned_watchlist(
+    db: AsyncSession, watchlist_id: str, user: User
+) -> Watchlist:
+    try:
+        parsed_id = uuid.UUID(watchlist_id)
+    except ValueError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Watchlist not found") from None
+
+    watchlist = await db.get(Watchlist, parsed_id)
+    if watchlist is None or watchlist.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Watchlist not found")
+    return watchlist
+
+
+@router.get("", response_model=list[WatchlistOut])
+async def list_watchlists(
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
+) -> list[WatchlistOut]:
+    query = (
+        select(Watchlist, func.count(WatchlistVessel.id))
+        .outerjoin(WatchlistVessel, WatchlistVessel.watchlist_id == Watchlist.id)
+        .where(Watchlist.user_id == current_user.id)
+        .group_by(Watchlist.id)
+        .order_by(Watchlist.created_at)
+    )
+    rows = (await db.execute(query)).all()
+    return [
+        WatchlistOut(
+            id=str(watchlist.id),
+            name=watchlist.name,
+            created_at=watchlist.created_at,
+            vessel_count=count,
+        )
+        for watchlist, count in rows
+    ]
+
+
+@router.post("", response_model=WatchlistOut, dependencies=[Depends(require_csrf)])
+async def create_watchlist(
+    body: WatchlistCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> WatchlistOut:
+    watchlist = Watchlist(
+        id=uuid.uuid4(),
+        user_id=current_user.id,
+        name=body.name,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(watchlist)
+    await db.commit()
+    return WatchlistOut(
+        id=str(watchlist.id), name=watchlist.name, created_at=watchlist.created_at, vessel_count=0
+    )
+
+
+@router.get("/{watchlist_id}", response_model=WatchlistDetailOut)
+async def get_watchlist(
+    watchlist_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> WatchlistDetailOut:
+    watchlist = await _get_owned_watchlist(db, watchlist_id, current_user)
+
+    position_geom = cast(VesselLatest.position, Geometry)
+    query = (
+        select(
+            WatchlistVessel,
+            Vessel.name,
+            ST_X(position_geom).label("lon"),
+            ST_Y(position_geom).label("lat"),
+            VesselLatest.observed_at,
+            VesselLatest.received_at,
+        )
+        .join(Vessel, Vessel.mmsi == WatchlistVessel.mmsi)
+        .outerjoin(VesselLatest, VesselLatest.mmsi == WatchlistVessel.mmsi)
+        .where(WatchlistVessel.watchlist_id == watchlist.id)
+        .order_by(WatchlistVessel.added_at)
+    )
+    rows = (await db.execute(query)).all()
+
+    vessels = [
+        WatchlistVesselOut(
+            mmsi=wv.mmsi,
+            name=name,
+            note=wv.note,
+            added_at=wv.added_at,
+            lon=lon,
+            lat=lat,
+            observed_at=observed_at,
+            received_at=received_at,
+            freshness=freshness_for(observed_at, received_at) if received_at else None,
+        )
+        for wv, name, lon, lat, observed_at, received_at in rows
+    ]
+
+    return WatchlistDetailOut(
+        id=str(watchlist.id), name=watchlist.name, created_at=watchlist.created_at, vessels=vessels
+    )
+
+
+@router.patch(
+    "/{watchlist_id}", response_model=WatchlistOut, dependencies=[Depends(require_csrf)]
+)
+async def rename_watchlist(
+    watchlist_id: str,
+    body: WatchlistRename,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> WatchlistOut:
+    watchlist = await _get_owned_watchlist(db, watchlist_id, current_user)
+    watchlist.name = body.name
+    await db.commit()
+
+    count = await db.scalar(
+        select(func.count(WatchlistVessel.id)).where(WatchlistVessel.watchlist_id == watchlist.id)
+    )
+    return WatchlistOut(
+        id=str(watchlist.id),
+        name=watchlist.name,
+        created_at=watchlist.created_at,
+        vessel_count=count or 0,
+    )
+
+
+@router.delete(
+    "/{watchlist_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf)]
+)
+async def delete_watchlist(
+    watchlist_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    watchlist = await _get_owned_watchlist(db, watchlist_id, current_user)
+    await db.execute(delete(WatchlistVessel).where(WatchlistVessel.watchlist_id == watchlist.id))
+    await db.delete(watchlist)
+    await db.commit()
+
+
+@router.put(
+    "/{watchlist_id}/vessels/{mmsi}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_csrf)],
+)
+async def add_vessel_to_watchlist(
+    watchlist_id: str,
+    mmsi: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    watchlist = await _get_owned_watchlist(db, watchlist_id, current_user)
+
+    stmt = pg_insert(WatchlistVessel).values(
+        id=uuid.uuid4(),
+        watchlist_id=watchlist.id,
+        mmsi=mmsi,
+        added_at=datetime.now(timezone.utc),
+    )
+    stmt = stmt.on_conflict_do_nothing(index_elements=["watchlist_id", "mmsi"])
+    try:
+        await db.execute(stmt)
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Vessel not found") from None
+
+
+@router.delete(
+    "/{watchlist_id}/vessels/{mmsi}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_csrf)],
+)
+async def remove_vessel_from_watchlist(
+    watchlist_id: str,
+    mmsi: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    watchlist = await _get_owned_watchlist(db, watchlist_id, current_user)
+    await db.execute(
+        delete(WatchlistVessel).where(
+            WatchlistVessel.watchlist_id == watchlist.id, WatchlistVessel.mmsi == mmsi
+        )
+    )
+    await db.commit()

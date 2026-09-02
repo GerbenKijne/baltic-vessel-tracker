@@ -52,4 +52,4 @@ export const api = {
   me: () => request<CurrentUser>("/api/v1/auth/me"),
 };
 
-export { ApiError };
+export { ApiError, request };

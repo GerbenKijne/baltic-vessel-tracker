@@ -11,7 +11,7 @@ from .db import SessionLocal
 from .models import User
 from .realtime.manager import heartbeat_loop, stream_listener
 from .redis_client import get_redis
-from .routers import auth, health, live, vessels
+from .routers import auth, health, live, vessels, watchlists
 from .security import hash_password, utcnow
 
 logging.basicConfig(level=logging.INFO)
@@ -72,4 +72,5 @@ if settings.cors_allow_origins:
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(vessels.router)
+app.include_router(watchlists.router)
 app.include_router(live.router)

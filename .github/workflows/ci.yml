@@ -119,6 +119,34 @@ jobs:
           if [ "$status" != "200" ]; then
             echo "Expected 200 from /api/v1/vessels, got $status"; exit 1
           fi
+      - name: Confirm watchlist CRUD works end to end (exercises the same PostGIS join pattern)
+        run: |
+          csrf=$(awk -F'\t' '$6 == "bvt_csrf" {print $7}' cookies.txt)
+          mmsi=$(docker compose -f infra/compose/docker-compose.yml exec -T postgres \
+            psql -U baltic -d baltic -tA -c "SELECT mmsi FROM vessel_latest LIMIT 1;" | tr -d '\r')
+
+          create_status=$(curl -s -o create.json -w '%{http_code}' -b cookies.txt -X POST \
+            -H 'Content-Type: application/json' -H "X-CSRF-Token: $csrf" \
+            -d '{"name":"CI Test List"}' http://localhost:8090/api/v1/watchlists)
+          cat create.json
+          [ "$create_status" = "200" ] || { echo "create watchlist failed: $create_status"; exit 1; }
+          watchlist_id=$(python3 -c "import json; print(json.load(open('create.json'))['id'])")
+
+          add_status=$(curl -s -o /dev/null -w '%{http_code}' -b cookies.txt -X PUT \
+            -H "X-CSRF-Token: $csrf" \
+            "http://localhost:8090/api/v1/watchlists/$watchlist_id/vessels/$mmsi")
+          [ "$add_status" = "204" ] || { echo "add vessel failed: $add_status"; exit 1; }
+
+          detail_status=$(curl -s -o detail.json -w '%{http_code}' -b cookies.txt \
+            "http://localhost:8090/api/v1/watchlists/$watchlist_id")
+          cat detail.json
+          [ "$detail_status" = "200" ] || { echo "get watchlist failed: $detail_status"; exit 1; }
+          python3 -c "
+          import json
+          data = json.load(open('detail.json'))
+          mmsis = [v['mmsi'] for v in data['vessels']]
+          assert '$mmsi' in mmsis, f'{\"$mmsi\"} not in {mmsis}'
+          "
       - name: Dump logs on failure
         if: failure()
         run: docker compose -f infra/compose/docker-compose.yml logs

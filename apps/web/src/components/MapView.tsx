@@ -3,10 +3,12 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef, useState } from "react";
 
 import type { LiveVessel } from "../api/live";
+import type { Watchlist } from "../api/watchlists";
 
 const LIVE_FRESH_SECONDS = 120;
 const STALE_SECONDS = 900;
 const ICON_SIZE = 24;
+const NEW_LIST_VALUE = "__new__";
 
 type Freshness = "live" | "delayed" | "stale";
 
@@ -79,7 +81,7 @@ function createDotIcon(size: number): ImageData {
   return ctx.getImageData(0, 0, size, size);
 }
 
-function renderVesselPopupHtml(vessel: LiveVessel): string {
+function renderVesselPopupHtml(vessel: LiveVessel, watchlists: Watchlist[]): string {
   const freshness = freshnessOf(vessel);
   const name = vessel.name ? escapeHtml(vessel.name) : "Unknown";
   const time = vessel.observedAt
@@ -102,13 +104,70 @@ function renderVesselPopupHtml(vessel: LiveVessel): string {
     .map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${value}</td></tr>`)
     .join("");
 
+  const optionsHtml = watchlists
+    .map((w) => `<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`)
+    .join("");
+
   return (
     `<div class="vessel-popup">` +
     `<h3>${name}</h3>` +
     `<div class="vessel-popup-mmsi">MMSI ${escapeHtml(vessel.mmsi)}</div>` +
     `<table>${rowsHtml}</table>` +
+    `<div class="vessel-popup-watchlist">` +
+    `<select class="vessel-popup-select">` +
+    optionsHtml +
+    `<option value="${NEW_LIST_VALUE}">+ New list…</option>` +
+    `</select>` +
+    `<button type="button" class="vessel-popup-add-btn">Add</button>` +
+    `</div>` +
+    `<div class="vessel-popup-status"></div>` +
     `</div>`
   );
+}
+
+interface WatchlistCallbacks {
+  onAddToWatchlist: (mmsi: string, watchlistId: string) => Promise<void>;
+  onCreateWatchlistAndAdd: (mmsi: string, name: string) => Promise<void>;
+}
+
+function attachPopupWatchlistHandlers(
+  popup: maplibregl.Popup,
+  mmsi: string,
+  callbacks: WatchlistCallbacks
+): void {
+  const el = popup.getElement();
+  const select = el?.querySelector<HTMLSelectElement>(".vessel-popup-select");
+  const button = el?.querySelector<HTMLButtonElement>(".vessel-popup-add-btn");
+  const status = el?.querySelector<HTMLElement>(".vessel-popup-status");
+  if (!select || !button || !status) return;
+
+  button.addEventListener("click", async () => {
+    const value = select.value;
+    if (!value) {
+      status.textContent = "Create a watchlist first.";
+      return;
+    }
+
+    button.disabled = true;
+    status.textContent = "Adding…";
+    try {
+      if (value === NEW_LIST_VALUE) {
+        const name = window.prompt("New watchlist name:")?.trim();
+        if (!name) {
+          status.textContent = "";
+          return;
+        }
+        await callbacks.onCreateWatchlistAndAdd(mmsi, name);
+      } else {
+        await callbacks.onAddToWatchlist(mmsi, value);
+      }
+      status.textContent = "Added.";
+    } catch {
+      status.textContent = "Failed to add — try again.";
+    } finally {
+      button.disabled = false;
+    }
+  });
 }
 
 const SOURCE_ID = "vessels";
@@ -117,15 +176,40 @@ const LAYER_ID = "vessel-markers";
 interface Props {
   vessels: Map<string, LiveVessel>;
   onMoveEnd: (bbox: { min_lon: number; min_lat: number; max_lon: number; max_lat: number }) => void;
+  watchlists: Watchlist[];
+  onAddToWatchlist: (mmsi: string, watchlistId: string) => Promise<void>;
+  onCreateWatchlistAndAdd: (mmsi: string, name: string) => Promise<void>;
 }
 
-export function MapView({ vessels, onMoveEnd }: Props) {
+export function MapView({
+  vessels,
+  onMoveEnd,
+  watchlists,
+  onAddToWatchlist,
+  onCreateWatchlistAndAdd,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
   const vesselsRef = useRef(vessels);
+  const watchlistsRef = useRef(watchlists);
+  const onAddToWatchlistRef = useRef(onAddToWatchlist);
+  const onCreateWatchlistAndAddRef = useRef(onCreateWatchlistAndAdd);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const selectedMmsiRef = useRef<string | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
+
+  useEffect(() => {
+    watchlistsRef.current = watchlists;
+    onAddToWatchlistRef.current = onAddToWatchlist;
+    onCreateWatchlistAndAddRef.current = onCreateWatchlistAndAdd;
+  }, [watchlists, onAddToWatchlist, onCreateWatchlistAndAdd]);
+
+  function attachHandlers(popup: maplibregl.Popup, mmsi: string) {
+    attachPopupWatchlistHandlers(popup, mmsi, {
+      onAddToWatchlist: (m, w) => onAddToWatchlistRef.current(m, w),
+      onCreateWatchlistAndAdd: (m, n) => onCreateWatchlistAndAddRef.current(m, n),
+    });
+  }
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -239,10 +323,14 @@ export function MapView({ vessels, onMoveEnd }: Props) {
         if (!vessel) return;
 
         const lngLat: [number, number] = [vessel.lon, vessel.lat];
-        const html = renderVesselPopupHtml(vessel);
+        const html = renderVesselPopupHtml(vessel, watchlistsRef.current);
 
         popupRef.current?.remove();
-        const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, maxWidth: "280px" })
+        const popup = new maplibregl.Popup({
+          closeButton: true,
+          closeOnClick: false,
+          maxWidth: "280px",
+        })
           .setLngLat(lngLat)
           .setHTML(html)
           .addTo(map);
@@ -254,6 +342,7 @@ export function MapView({ vessels, onMoveEnd }: Props) {
         });
         popupRef.current = popup;
         selectedMmsiRef.current = mmsi;
+        attachHandlers(popup, mmsi);
       });
 
       map.on("mouseenter", LAYER_ID, () => {
@@ -298,8 +387,10 @@ export function MapView({ vessels, onMoveEnd }: Props) {
     if (selectedMmsi && popupRef.current) {
       const vessel = vessels.get(selectedMmsi);
       if (vessel) {
-        popupRef.current.setLngLat([vessel.lon, vessel.lat]);
-        popupRef.current.setHTML(renderVesselPopupHtml(vessel));
+        const popup = popupRef.current;
+        popup.setLngLat([vessel.lon, vessel.lat]);
+        popup.setHTML(renderVesselPopupHtml(vessel, watchlistsRef.current));
+        attachHandlers(popup, selectedMmsi);
       }
     }
   }, [vessels]);

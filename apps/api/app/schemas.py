@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class LoginRequest(BaseModel):
@@ -33,3 +33,37 @@ class VesselOut(BaseModel):
 class VesselListOut(BaseModel):
     vessels: list[VesselOut]
     truncated: bool
+
+
+class WatchlistCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class WatchlistRename(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class WatchlistOut(BaseModel):
+    id: str
+    name: str
+    created_at: datetime
+    vessel_count: int
+
+
+class WatchlistVesselOut(BaseModel):
+    mmsi: str
+    name: Optional[str]
+    note: Optional[str]
+    added_at: datetime
+    lon: Optional[float]
+    lat: Optional[float]
+    observed_at: Optional[datetime]
+    received_at: Optional[datetime]
+    freshness: Optional[str]
+
+
+class WatchlistDetailOut(BaseModel):
+    id: str
+    name: str
+    created_at: datetime
+    vessels: list[WatchlistVesselOut]
