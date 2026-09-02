@@ -64,9 +64,6 @@ export function MapView({ vessels, onMoveEnd }: Props) {
       return;
     }
     mapRef.current = map;
-    // Temporary debugging aid to inspect the live map/source from the
-    // browser console — remove once the vessel-rendering issue is found.
-    (window as unknown as { __map: MaplibreMap }).__map = map;
 
     map.on("error", (event) => {
       setMapError(event.error?.message ?? "Map error");
@@ -102,6 +99,16 @@ export function MapView({ vessels, onMoveEnd }: Props) {
 
       // Freshness is never color-only (PRD SS7.3): pair the marker color
       // with a short text label.
+      //
+      // text-font must be a font this style's glyphs server actually
+      // serves. Leaving it unset falls back to MapLibre's spec default
+      // ("Open Sans Regular, Arial Unicode MS Regular"), which OpenFreeMap
+      // doesn't host — the resulting 404 doesn't just fail the label, it
+      // fails the *tile* for every layer sharing this source, including
+      // the unrelated circle layer above (no vessels rendered at all,
+      // with no visible error unless you inspect the network tab). Found
+      // via a live NAS deploy; "Noto Sans Regular" is what OpenFreeMap's
+      // "liberty" style actually ships.
       map.addLayer({
         id: `${LAYER_ID}-label`,
         type: "symbol",
@@ -118,6 +125,7 @@ export function MapView({ vessels, onMoveEnd }: Props) {
             "S",
             "?",
           ],
+          "text-font": ["Noto Sans Regular"],
           "text-size": 10,
           "text-offset": [0, 1.1],
           "text-anchor": "top",
