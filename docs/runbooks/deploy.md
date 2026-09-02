@@ -3,6 +3,9 @@
 Phase 1 target: a Docker-capable machine you control (per the PRD's
 "self-hosted first" principle). No cloud deployment is configured yet.
 
+For a Synology NAS specifically, see [Synology NAS](#synology-nas) below —
+read that section instead of (in addition to) "Fresh install."
+
 ## Fresh install
 
 1. Install Docker Engine + Compose plugin on the host.
@@ -54,3 +57,98 @@ idempotent (it's a no-op if already at `head`).
 Set `INGEST_ADAPTER` in `.env` once a real adapter exists. Do not switch
 away from `simulator` until docs/data-source-register.md's capture and
 licence review are complete for that source.
+
+## Synology NAS
+
+### 0. Prerequisites
+
+- **Container Manager** installed (Package Center → search "Container
+  Manager"; on older DSM it's called "Docker"). If it's not offered in
+  Package Center, this model/DSM version doesn't support it — check
+  Synology's compatibility list.
+- **SSH enabled**: Control Panel → Terminal & SNMP → check "Enable SSH
+  service." Note the port (default 22).
+- Confirm CPU architecture over SSH — every image this stack uses
+  (`postgis/postgis`, `redis`, `python`, `node`, `nginx`, `caddy`) publishes
+  both, so either is fine:
+  ```bash
+  uname -m   # x86_64 or aarch64 — both supported
+  ```
+
+### 1. Get the code onto the NAS
+
+The repo is private, so a plain `git clone` needs credentials. The
+cleanest option is a **read-only deploy key**:
+
+1. On the NAS: `ssh-keygen -t ed25519 -f ~/.ssh/baltic_deploy_key -N ""`
+   (run as the user you'll deploy as).
+2. `cat ~/.ssh/baltic_deploy_key.pub` and add it on GitHub under
+   the repo's Settings → Deploy keys → Add deploy key (read-only is
+   enough — this key should never need write access).
+3. Clone using that key:
+   ```bash
+   GIT_SSH_COMMAND="ssh -i ~/.ssh/baltic_deploy_key" \
+     git clone git@github.com:GerbenKijne/baltic-vessel-tracker.git \
+     /volume1/docker/baltic-vessel-tracker
+   ```
+   (Adjust the destination path to a Shared Folder you've created for
+   Docker projects, e.g. via File Station.)
+
+If `git` isn't available over SSH, install the **Git Server** package
+from Package Center (it installs the `git` binary NAS-wide even if you
+don't use its hosting feature) — or, as a fallback with no git at all,
+download the repo as a zip from GitHub (in your own logged-in browser)
+and extract it into that folder via File Station.
+
+### 2. Configure and start
+
+```bash
+cd /volume1/docker/baltic-vessel-tracker
+cp .env.example .env
+vi .env   # set POSTGRES_PASSWORD, BOOTSTRAP_ADMIN_EMAIL/PASSWORD
+sudo docker compose -f infra/compose/docker-compose.yml --env-file .env up -d --build
+```
+
+Synology usually requires `sudo` for Docker commands unless your user is
+in the relevant admin group. If `docker compose` (the v2 plugin syntax)
+isn't recognized, try the older `docker-compose` (hyphenated) — which
+binary is present depends on the Container Manager/Docker package version.
+
+### 3. Access it
+
+- LAN: `http://<nas-ip>:8080`.
+- If port 8080 is already used by something else on the NAS, change the
+  `web` service's port mapping in `infra/compose/docker-compose.yml`
+  (`"8080:80"` → e.g. `"8090:80"`) before starting.
+
+### 4. Exposing it beyond the LAN (optional)
+
+Skip this repo's Caddy profile on a Synology — DSM already has a mature
+reverse proxy with automatic Let's Encrypt certs, which is the more
+idiomatic fit here:
+
+1. Control Panel → Login Portal → Advanced → Reverse Proxy → Create.
+2. Source: your chosen subdomain, HTTPS, port 443.
+3. Destination: `localhost`, port 8080 (or whatever you mapped `web` to).
+4. Control Panel → Security → Certificate to issue/attach a Let's Encrypt
+   cert for that subdomain, if DSM hasn't already offered to.
+5. Set `COOKIE_SECURE=true` in `.env` (the default) once it's served over
+   HTTPS.
+
+Don't port-forward 8080 directly from your router — go through DSM's
+reverse proxy so it's TLS-terminated.
+
+### 5. Survives reboots?
+
+Yes — the compose file sets `restart: unless-stopped` on every service,
+and Synology's Container Manager keeps the Docker daemon running as a
+system service, so containers come back up automatically after a NAS
+reboot. No extra Task Scheduler entry needed.
+
+### 6. Updating
+
+```bash
+cd /volume1/docker/baltic-vessel-tracker
+git pull
+sudo docker compose -f infra/compose/docker-compose.yml --env-file .env up -d --build
+```
