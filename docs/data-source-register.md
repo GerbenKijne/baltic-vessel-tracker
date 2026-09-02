@@ -128,9 +128,38 @@ enabling any real provider.
 - Terms review: **not done**.
 - Docs: https://developer.barentswatch.no/docs/AIS/live-ais-api/
 
-## AISHub / local receiver / licensed Sweden
+## AISHub
 
-Post-V1 per the PRD scope table — no spike scheduled.
+**Blocked, checked 2026-09-02 — requires a receiver we don't have.**
+AISHub is not a signup-and-get-a-key service: it's a contributor-based
+network. Their own application guidance: "Applications without an
+operational AIS station and feed will not be approved." Concretely, to
+even apply for API access you must already be *running and sharing your
+own AIS receiver*, with a 7-day track record meeting: 10+ vessels average
+coverage, 90%+ uptime, ≤60s downsampling, ≤10s message delay. There is no
+path to an AISHub API key without first owning and operating physical AIS
+receiver hardware for at least a week. Per the PRD's own scoping for this
+adapter ("Interface and config schema only unless credentials/feed access
+are available"), no adapter code exists for this — there's nothing to
+build against without real access. Docs: https://www.aishub.net/api,
+https://www.aishub.net/join-us.
+
+If a local SDR receiver is ever set up (see "local receiver" below), it
+would simultaneously unlock this path — feed AISHub for a week at the
+required quality bar and re-apply.
+
+## Local receiver (Sweden coverage)
+
+Post-V1 per the PRD scope table — no spike scheduled. Would need an SDR
+dongle + antenna with a view of water, plus receiver software (e.g.
+AIS-catcher) feeding an authenticated ingress into this pipeline (PRD
+SS12: "never expose UDP directly to internet"). Not pursued yet — would
+require buying and physically setting up hardware.
+
+## Licensed Sweden (future)
+
+Not a V1 dependency per the PRD (SS21) — no commercial/access decision
+made, no spike scheduled.
 
 ## Storage sizing
 
