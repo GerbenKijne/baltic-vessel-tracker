@@ -108,6 +108,17 @@ jobs:
             sleep 2
           done
           echo "No simulated vessel data reached the database"; exit 1
+      - name: Confirm the viewport query actually works (exercises PostGIS geometry functions)
+        run: |
+          curl -sf -c cookies.txt -X POST http://localhost:8090/api/v1/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"admin@example.com","password":"ci-admin-password"}' > /dev/null
+          status=$(curl -s -o response.json -w '%{http_code}' -b cookies.txt \
+            'http://localhost:8090/api/v1/vessels?min_lon=10&min_lat=54&max_lon=25&max_lat=66')
+          cat response.json
+          if [ "$status" != "200" ]; then
+            echo "Expected 200 from /api/v1/vessels, got $status"; exit 1
+          fi
       - name: Dump logs on failure
         if: failure()
         run: docker compose -f infra/compose/docker-compose.yml logs
