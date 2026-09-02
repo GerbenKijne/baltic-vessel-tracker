@@ -42,7 +42,7 @@ from canonical import Source  # noqa: E402
 
 from worker.adapters.aisstream import AISStreamAdapter  # noqa: E402
 from worker.config import DEFAULT_BOUNDING_BOXES  # noqa: E402
-from worker.normalize import parse_and_normalize  # noqa: E402
+from worker.normalize import IgnorableMessage, parse_and_normalize  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("aisstream_capture")
@@ -123,6 +123,8 @@ async def run_capture(minutes: int, boxes: list, box_names: list) -> None:
 
             try:
                 obs = parse_and_normalize(raw, Source.AISSTREAM)
+            except IgnorableMessage:
+                continue
             except Exception as exc:  # noqa: BLE001
                 error_count += 1
                 logger.debug("Quarantined message: %s", exc)

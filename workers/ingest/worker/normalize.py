@@ -24,6 +24,16 @@ from canonical import CanonicalAisObservation, NavStatus, Position, QualityFlag,
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
+
+class IgnorableMessage(ValueError):
+    """A provider message that is valid and expected but isn't AIS data
+    (e.g. a subscription acknowledgment) -- distinct from a malformed
+    message, so callers can skip it without counting it as an error or
+    quarantining it. Subclasses ValueError so code that only catches
+    Exception broadly still behaves safely if it doesn't check for this
+    specifically.
+    """
+
 _NAV_STATUS_MAP = {
     0: NavStatus.UNDER_WAY_USING_ENGINE,
     1: NavStatus.AT_ANCHOR,
@@ -111,6 +121,16 @@ def _extract_aisstream(raw: dict) -> _ExtractedFields:
     only two message types this adapter subscribes to.
     """
     message_type = raw["MessageType"]
+
+    # Not an AIS data message: sent once per connection, right after a
+    # subscription is accepted, and does NOT follow the Message[MessageType]
+    # nesting every actual data message uses (it's just
+    # {"MessageType": "SubscriptionConfirmation", "Message": {"CompressionEnabled": true}}).
+    # Confirmed live 2026-09-02 -- indexing into it like a data message
+    # raises KeyError, which is not a malformed-message situation.
+    if message_type == "SubscriptionConfirmation":
+        raise IgnorableMessage("AISStream subscription acknowledged")
+
     body = raw["Message"][message_type]
     mmsi = str(body["UserID"]).strip().zfill(9)
 

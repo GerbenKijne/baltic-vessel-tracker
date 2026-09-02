@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from canonical import Source
 
-from worker.normalize import parse_and_normalize
+from worker.normalize import IgnorableMessage, parse_and_normalize
 
 FIXTURES_DIR = Path(__file__).resolve().parents[3] / "packages" / "test-fixtures" / "aisstream"
 
@@ -75,6 +75,15 @@ def test_parses_ship_static_data_with_no_position() -> None:
     assert obs.position is None
     assert obs.name == "EXAMPLE VESSEL"
     assert obs.message_type == 5
+
+
+def test_subscription_confirmation_is_ignorable_not_an_error() -> None:
+    # Confirmed live 2026-09-02: {"MessageType": "SubscriptionConfirmation",
+    # "Message": {"CompressionEnabled": true}} -- doesn't nest under
+    # Message[MessageType] like real AIS data messages do.
+    raw = {"MessageType": "SubscriptionConfirmation", "Message": {"CompressionEnabled": True}}
+    with pytest.raises(IgnorableMessage):
+        parse_and_normalize(raw, Source.AISSTREAM)
 
 
 def test_unsupported_message_type_is_rejected() -> None:

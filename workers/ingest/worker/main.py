@@ -17,7 +17,7 @@ from .adapters.base import Adapter
 from .adapters.simulator import SimulatorAdapter
 from .config import WorkerConfig, load_config
 from .dedupe import is_duplicate
-from .normalize import parse_and_normalize
+from .normalize import IgnorableMessage, parse_and_normalize
 from .persistence import (
     insert_position_observation,
     record_raw_message,
@@ -70,6 +70,8 @@ async def run() -> None:
         received_at = datetime.now(timezone.utc)
         try:
             obs = parse_and_normalize(raw, source)
+        except IgnorableMessage:
+            continue
         except Exception as exc:  # noqa: BLE001 - a bad message must not crash the worker
             error_count += 1
             async with engine.begin() as conn:
