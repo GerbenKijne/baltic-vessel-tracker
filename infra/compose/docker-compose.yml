@@ -107,7 +107,10 @@ services:
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
     ports:
-      - "8080:80"
+      # Configurable since 8080 is a very commonly already-taken port on a
+      # machine running other self-hosted services (hit this on a NAS
+      # already running Unifi Network Application on 8080).
+      - "${WEB_PORT:-8090}:80"
     depends_on:
       - api
 

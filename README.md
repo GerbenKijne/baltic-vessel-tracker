@@ -36,7 +36,8 @@ cp .env.example .env   # then edit it — set a real password and admin login
 docker compose -f infra/compose/docker-compose.yml --env-file .env up -d --build
 ```
 
-Then open http://localhost:8080 and sign in with the
+Then open http://localhost:8090 (or whatever `WEB_PORT` you set in `.env`)
+and sign in with the
 `BOOTSTRAP_ADMIN_EMAIL`/`BOOTSTRAP_ADMIN_PASSWORD` from `.env`. You should
 see a handful of simulated vessels moving around the Stockholm archipelago
 within a few seconds.

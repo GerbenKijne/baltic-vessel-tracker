@@ -20,16 +20,17 @@ read that section instead of (in addition to) "Fresh install."
 5. Check `docker compose -f infra/compose/docker-compose.yml ps` — `postgres`
    and `redis` should be healthy, `migrate` should have exited 0, `api` and
    `worker-ingest` should be running.
-6. Visit `http://<host>:8080`, sign in with the bootstrap admin credentials.
-7. `curl http://<host>:8080/health/ready` should report `"status": "ok"`.
+6. Visit `http://<host>:8090` (or whatever `WEB_PORT` you set in `.env`),
+   sign in with the bootstrap admin credentials.
+7. `curl http://<host>:8090/health/ready` should report `"status": "ok"`.
 
 This should complete well within the PRD's 20-minute fresh-install target
 (release acceptance criteria, PRD SS18) — if it doesn't, that's a bug.
 
 ## Exposing it beyond localhost
 
-The stack binds `web` to port 8080 with no TLS by default. To expose it on
-the internet:
+The stack binds `web` to `WEB_PORT` (default 8090) with no TLS by default.
+To expose it on the internet:
 
 1. Point a domain's DNS at the host.
 2. Edit `infra/compose/Caddyfile`, replacing the placeholder `:80` block
@@ -116,10 +117,14 @@ binary is present depends on the Container Manager/Docker package version.
 
 ### 3. Access it
 
-- LAN: `http://<nas-ip>:8080`.
-- If port 8080 is already used by something else on the NAS, change the
-  `web` service's port mapping in `infra/compose/docker-compose.yml`
-  (`"8080:80"` → e.g. `"8090:80"`) before starting.
+- LAN: `http://<nas-ip>:8090` (the default `WEB_PORT`).
+- On a NAS already running other Docker services, a port collision here is
+  common — a Synology running Unifi Network Application, for instance,
+  already claims 8080. If `up` fails with "port is already allocated" or
+  "address already in use", check what's already bound
+  (`sudo docker ps -a` for other containers, `sudo netstat -tlnp | grep <port>`
+  for anything else) and set a free `WEB_PORT` in `.env` instead of editing
+  the compose file.
 
 ### 4. Exposing it beyond the LAN (optional)
 
@@ -129,14 +134,14 @@ idiomatic fit here:
 
 1. Control Panel → Login Portal → Advanced → Reverse Proxy → Create.
 2. Source: your chosen subdomain, HTTPS, port 443.
-3. Destination: `localhost`, port 8080 (or whatever you mapped `web` to).
+3. Destination: `localhost`, your `WEB_PORT` (8090 by default).
 4. Control Panel → Security → Certificate to issue/attach a Let's Encrypt
    cert for that subdomain, if DSM hasn't already offered to.
 5. Set `COOKIE_SECURE=true` in `.env` (the default) once it's served over
    HTTPS.
 
-Don't port-forward 8080 directly from your router — go through DSM's
-reverse proxy so it's TLS-terminated.
+Don't port-forward `WEB_PORT` directly from your router — go through
+DSM's reverse proxy so it's TLS-terminated.
 
 ### 5. Survives reboots?
 
