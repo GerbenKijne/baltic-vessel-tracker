@@ -17,13 +17,24 @@ enabling any real provider.
 - Capture status: **done, 2026-09-02**. 60-minute capture across all
   three required boxes, real API key, zero parse errors, zero
   reconnects, zero positions outside their box. Full report below.
-- Terms review: **still not done**. The capture only tells us the data
-  is *usable*, not that we're *allowed* to store/display/retain it —
-  https://aisstream.io's terms of service still need an actual read
-  before any live AISStream data is persisted in anything but a
-  throwaway/testing setup.
-- **Do not set `INGEST_ADAPTER=aisstream` in a real deployment's `.env`
-  until the terms review above is done.**
+- Terms review: **done, 2026-09-02 — no published terms exist**.
+  Checked aisstream.io itself, its privacy policy
+  (`aisstream.io/privacypolicy` — covers only site telemetry and GitHub
+  OAuth signup, not the AIS data), all three GitHub repos (only
+  `ais-message-models`' MIT license, which covers the schema/client code,
+  not data usage rights), and common `/terms`, `/tos`, `/legal` paths
+  (all 404). There is no Terms of Service or Acceptable Use Policy
+  governing storage, retention, redistribution, or commercial use of the
+  AIS data itself — not "terms that permit it," an absence of any terms.
+  **Decision: proceed anyway.** This is a small, non-commercial,
+  self-hosted personal project — not redistributing, reselling, or
+  operating at a scale where the absence of stated restrictions is a
+  meaningful risk. Revisit if the project's scope or audience changes
+  (e.g. multi-tenant, public, commercial).
+- **`INGEST_ADAPTER=aisstream` is cleared to enable** in this project's
+  own deployment, given the decision above — still don't default a
+  *shared/example* `.env` to it, since each deployer needs their own key
+  and should make their own call on the terms gap.
 - Docs: https://aisstream.io/documentation
 - Operational limits confirmed from the docs (2026-09-02): 3 subscribed
   connections per account, 3 open connections per IP, 1 subscription

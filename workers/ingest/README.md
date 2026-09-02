@@ -11,10 +11,14 @@ for local dev, demos, and CI. Source: `worker/adapters/simulator.py`.
 
 ## `aisstream`
 
-**Not enabled by default** — gated behind the PRD SS12.1 pre-build spike
-and a terms review, tracked in `docs/data-source-register.md`. Do not
-set `INGEST_ADAPTER=aisstream` in a shared/production `.env` until that
-file shows the capture and terms review as done.
+**Not enabled by default in a fresh clone's `.env.example`** — each
+deployer needs their own API key and should read
+`docs/data-source-register.md`'s terms-review note (AISStream has no
+published Terms of Service for the data itself, only a privacy policy
+covering their own site telemetry) and decide for themselves before
+setting `INGEST_ADAPTER=aisstream`. The PRD SS12.1 capture spike and that
+terms review are both done for *this* deployment — see
+`docs/data-source-register.md` for the actual results and reasoning.
 
 - Docs: https://aisstream.io/documentation
 - Message schema: https://github.com/aisstream/ais-message-models

@@ -13,12 +13,16 @@ Phase 1 walking skeleton (see the PRD's phased plan, SS19, and
 is running live on a self-hosted Docker host: auth, the full canonical
 database schema, a simulated AIS feed, and a live map are wired end to end.
 
-Phase 2's AISStream adapter is **built but not enabled**
+Phase 2's AISStream adapter is **built and cleared to enable**
 ([docs/adr/0002-aisstream-adapter.md](docs/adr/0002-aisstream-adapter.md)) —
-it's gated behind the PRD's mandatory capture spike and a terms-of-service
-review, both still outstanding; see
-[docs/data-source-register.md](docs/data-source-register.md) and
-`workers/ingest/README.md`. BarentsWatch, watchlists, history,
+the PRD's mandatory capture spike ran clean (60 min, real traffic, zero
+parse errors) and the terms-of-service review found no published terms
+governing the data at all, which this project accepted as an acceptable
+risk given its small, non-commercial, self-hosted scope. See
+[docs/data-source-register.md](docs/data-source-register.md) for the
+full capture results and reasoning, and `workers/ingest/README.md` for
+what a new deployer needs to decide for themselves before flipping
+`INGEST_ADAPTER` to `aisstream`. BarentsWatch, watchlists, history,
 geofences/alerts, and hardening are not built yet.
 
 ## Stack
