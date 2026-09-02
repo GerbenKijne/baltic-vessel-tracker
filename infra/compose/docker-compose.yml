@@ -40,7 +40,20 @@ services:
     build:
       context: ../..
       dockerfile: apps/api/Dockerfile
-    command: ["alembic", "upgrade", "head"]
+    # On a fresh volume, Postgres briefly starts a temporary internal server
+    # to run initdb before restarting as the real one. `pg_isready` (our
+    # healthcheck) can report healthy against that temporary instance right
+    # before the restart, so `depends_on: service_healthy` alone isn't
+    # reliable here. Retry the real TCP connection ourselves before running
+    # migrations, instead of relying on that healthcheck being race-free.
+    command: >
+      sh -c "
+      until python -c \"import socket; socket.create_connection(('postgres', 5432), timeout=2).close()\" 2>/dev/null; do
+        echo 'Waiting for postgres to accept connections...';
+        sleep 2;
+      done;
+      alembic upgrade head
+      "
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-baltic}:${POSTGRES_PASSWORD:-baltic}@postgres:5432/${POSTGRES_DB:-baltic}
     depends_on:
