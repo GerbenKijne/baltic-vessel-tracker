@@ -134,7 +134,11 @@ export function MapView({ vessels, onMoveEnd }: Props) {
     try {
       map = new maplibregl.Map({
         container: containerRef.current,
-        style: "https://tiles.openfreemap.org/styles/liberty",
+        // Dark/greyscale basemap: matches the app's dark chrome and makes
+        // the colored vessel markers stand out more than a full-color
+        // basemap would. Same glyphs/font as "liberty" (confirmed against
+        // the style JSON) so this doesn't reopen the font-404 issue.
+        style: "https://tiles.openfreemap.org/styles/dark",
         // Default viewport: Sweden and the Baltic (PRD SS7.2).
         center: [18.0, 58.5],
         zoom: 5,
