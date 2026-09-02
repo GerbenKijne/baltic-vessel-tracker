@@ -64,6 +64,9 @@ export function MapView({ vessels, onMoveEnd }: Props) {
       return;
     }
     mapRef.current = map;
+    // Temporary debugging aid to inspect the live map/source from the
+    // browser console — remove once the vessel-rendering issue is found.
+    (window as unknown as { __map: MaplibreMap }).__map = map;
 
     map.on("error", (event) => {
       setMapError(event.error?.message ?? "Map error");
