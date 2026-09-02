@@ -40,9 +40,8 @@ async def list_vessels(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid bounding box")
 
     envelope = ST_MakeEnvelope(min_lon, min_lat, max_lon, max_lat, 4326)
-    # ST_X/ST_Y only accept `geometry`, but `position` is `geography` --
-    # an explicit cast is required (unlike ST_Within below, which PostGIS
-    # will implicitly cast for).
+    # ST_X/ST_Y/ST_Within only accept `geometry`, but `position` is
+    # `geography` -- PostGIS does not cast between them implicitly.
     position_geom = cast(VesselLatest.position, Geometry)
     query = (
         select(
@@ -52,7 +51,7 @@ async def list_vessels(
             ST_Y(position_geom).label("lat"),
         )
         .join(Vessel, Vessel.mmsi == VesselLatest.mmsi)
-        .where(ST_Within(VesselLatest.position, envelope))
+        .where(ST_Within(position_geom, envelope))
         .limit(min(limit, settings.viewport_max_results) + 1)
     )
     rows = (await db.execute(query)).all()

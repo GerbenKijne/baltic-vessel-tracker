@@ -26,7 +26,8 @@ async def _authenticate(websocket: WebSocket) -> bool:
 async def _send_snapshot(websocket: WebSocket, bbox: Bbox) -> None:
     async with SessionLocal() as db:
         envelope = ST_MakeEnvelope(bbox.min_lon, bbox.min_lat, bbox.max_lon, bbox.max_lat, 4326)
-        # ST_X/ST_Y only accept `geometry`, but `position` is `geography`.
+        # ST_X/ST_Y/ST_Within only accept `geometry`, but `position` is
+        # `geography` -- PostGIS does not cast between them implicitly.
         position_geom = cast(VesselLatest.position, Geometry)
         query = (
             select(
@@ -36,7 +37,7 @@ async def _send_snapshot(websocket: WebSocket, bbox: Bbox) -> None:
                 ST_Y(position_geom).label("lat"),
             )
             .join(Vessel, Vessel.mmsi == VesselLatest.mmsi)
-            .where(ST_Within(VesselLatest.position, envelope))
+            .where(ST_Within(position_geom, envelope))
             .limit(20000)
         )
         rows = (await db.execute(query)).all()
