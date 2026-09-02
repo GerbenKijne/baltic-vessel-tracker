@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { watchlistsApi } from "../api/watchlists";
 
@@ -15,6 +16,7 @@ function formatLastSeen(vessel: {
 
 export function WatchlistsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newListName, setNewListName] = useState("");
   const [renameValue, setRenameValue] = useState<string | null>(null);
@@ -128,6 +130,9 @@ export function WatchlistsPage() {
               ) : (
                 <>
                   <h2>{detail.name}</h2>
+                  <button onClick={() => navigate(`/map?watchlist=${detail.id}`)}>
+                    View on map
+                  </button>
                   <button onClick={() => setRenameValue(detail.name)}>Rename</button>
                   <button
                     className="watchlists-delete"
@@ -172,7 +177,14 @@ export function WatchlistsPage() {
                         )}
                       </td>
                       <td>{formatLastSeen(vessel)}</td>
-                      <td>
+                      <td className="watchlists-row-actions">
+                        <button
+                          onClick={() =>
+                            navigate(`/map?watchlist=${detail.id}&track=${vessel.mmsi}`)
+                          }
+                        >
+                          Track
+                        </button>
                         <button
                           className="watchlists-remove-vessel"
                           onClick={() => removeVesselMutation.mutate(vessel.mmsi)}

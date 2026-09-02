@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     viewport_max_results: int = 20000
     ws_heartbeat_seconds: int = 25
 
+    # PRD Appendix A default.
+    track_max_points: int = 5000
+    track_default_window_hours: int = 24
+    track_gap_minutes: int = 30
+
     cors_allow_origins: list[str] = []
 
     cookie_secure: bool = True

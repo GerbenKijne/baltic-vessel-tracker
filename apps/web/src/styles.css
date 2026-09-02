@@ -310,6 +310,40 @@ body {
   min-height: 1em;
 }
 
+.vessel-popup-track-btn {
+  width: 100%;
+  margin-top: 0.5rem;
+  background: none;
+  border: 1px solid #33455a;
+  color: #e6edf3;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.vessel-popup-track-btn:hover {
+  background: #1b2733;
+}
+
+/* Map controls */
+
+.watchlist-filter {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 1;
+}
+
+.watchlist-filter select {
+  background: rgba(15, 23, 32, 0.9);
+  color: #e6edf3;
+  border: 1px solid #33455a;
+  border-radius: 6px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.85rem;
+}
+
 /* Watchlists page */
 
 .watchlists-page {
@@ -464,7 +498,12 @@ body {
   border-bottom: 1px solid #1b2733;
 }
 
-.watchlists-remove-vessel {
+.watchlists-row-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.watchlists-row-actions button {
   background: none;
   border: 1px solid #33455a;
   color: #e6edf3;
@@ -472,4 +511,9 @@ body {
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.8rem;
+}
+
+.watchlists-remove-vessel {
+  border-color: #7f1d1d !important;
+  color: #f87171 !important;
 }

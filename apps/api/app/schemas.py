@@ -67,3 +67,25 @@ class WatchlistDetailOut(BaseModel):
     name: str
     created_at: datetime
     vessels: list[WatchlistVesselOut]
+
+
+class TrackPointOut(BaseModel):
+    lon: float
+    lat: float
+    time: datetime
+    time_source: str
+    sog_kn: Optional[float]
+    quality_flags: list[str]
+
+
+class TrackSegmentOut(BaseModel):
+    points: list[TrackPointOut]
+
+
+class TrackOut(BaseModel):
+    mmsi: str
+    window_start: datetime
+    window_end: datetime
+    segments: list[TrackSegmentOut]
+    point_count: int
+    truncated: bool

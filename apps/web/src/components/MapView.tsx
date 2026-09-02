@@ -3,6 +3,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef, useState } from "react";
 
 import type { LiveVessel } from "../api/live";
+import type { Track } from "../api/tracks";
 import type { Watchlist } from "../api/watchlists";
 
 const LIVE_FRESH_SECONDS = 120;
@@ -81,6 +82,23 @@ function createDotIcon(size: number): ImageData {
   return ctx.getImageData(0, 0, size, size);
 }
 
+function trackToGeoJson(track: Track | null): GeoJSON.FeatureCollection {
+  if (!track) return { type: "FeatureCollection", features: [] };
+  return {
+    type: "FeatureCollection",
+    features: track.segments
+      .filter((segment) => segment.points.length > 1)
+      .map((segment) => ({
+        type: "Feature",
+        geometry: {
+          type: "LineString",
+          coordinates: segment.points.map((p) => [p.lon, p.lat]),
+        },
+        properties: {},
+      })),
+  };
+}
+
 function renderVesselPopupHtml(vessel: LiveVessel, watchlists: Watchlist[]): string {
   const freshness = freshnessOf(vessel);
   const name = vessel.name ? escapeHtml(vessel.name) : "Unknown";
@@ -121,6 +139,7 @@ function renderVesselPopupHtml(vessel: LiveVessel, watchlists: Watchlist[]): str
     `<button type="button" class="vessel-popup-add-btn">Add</button>` +
     `</div>` +
     `<div class="vessel-popup-status"></div>` +
+    `<button type="button" class="vessel-popup-track-btn">Show 24h track</button>` +
     `</div>`
   );
 }
@@ -128,6 +147,7 @@ function renderVesselPopupHtml(vessel: LiveVessel, watchlists: Watchlist[]): str
 interface WatchlistCallbacks {
   onAddToWatchlist: (mmsi: string, watchlistId: string) => Promise<void>;
   onCreateWatchlistAndAdd: (mmsi: string, name: string) => Promise<void>;
+  onShowTrack: (mmsi: string) => void;
 }
 
 function attachPopupWatchlistHandlers(
@@ -139,7 +159,8 @@ function attachPopupWatchlistHandlers(
   const select = el?.querySelector<HTMLSelectElement>(".vessel-popup-select");
   const button = el?.querySelector<HTMLButtonElement>(".vessel-popup-add-btn");
   const status = el?.querySelector<HTMLElement>(".vessel-popup-status");
-  if (!select || !button || !status) return;
+  const trackButton = el?.querySelector<HTMLButtonElement>(".vessel-popup-track-btn");
+  if (!select || !button || !status || !trackButton) return;
 
   button.addEventListener("click", async () => {
     const value = select.value;
@@ -168,10 +189,18 @@ function attachPopupWatchlistHandlers(
       button.disabled = false;
     }
   });
+
+  trackButton.addEventListener("click", () => {
+    callbacks.onShowTrack(mmsi);
+  });
 }
 
 const SOURCE_ID = "vessels";
 const LAYER_ID = "vessel-markers";
+const TRACK_SOURCE_ID = "vessel-track";
+const TRACK_LAYER_ID = "vessel-track-line";
+
+type Bounds = [[number, number], [number, number]];
 
 interface Props {
   vessels: Map<string, LiveVessel>;
@@ -179,6 +208,9 @@ interface Props {
   watchlists: Watchlist[];
   onAddToWatchlist: (mmsi: string, watchlistId: string) => Promise<void>;
   onCreateWatchlistAndAdd: (mmsi: string, name: string) => Promise<void>;
+  onShowTrack: (mmsi: string) => void;
+  track: Track | null;
+  focusBounds: Bounds | null;
 }
 
 export function MapView({
@@ -187,6 +219,9 @@ export function MapView({
   watchlists,
   onAddToWatchlist,
   onCreateWatchlistAndAdd,
+  onShowTrack,
+  track,
+  focusBounds,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
@@ -194,6 +229,7 @@ export function MapView({
   const watchlistsRef = useRef(watchlists);
   const onAddToWatchlistRef = useRef(onAddToWatchlist);
   const onCreateWatchlistAndAddRef = useRef(onCreateWatchlistAndAdd);
+  const onShowTrackRef = useRef(onShowTrack);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const selectedMmsiRef = useRef<string | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -202,12 +238,14 @@ export function MapView({
     watchlistsRef.current = watchlists;
     onAddToWatchlistRef.current = onAddToWatchlist;
     onCreateWatchlistAndAddRef.current = onCreateWatchlistAndAdd;
-  }, [watchlists, onAddToWatchlist, onCreateWatchlistAndAdd]);
+    onShowTrackRef.current = onShowTrack;
+  }, [watchlists, onAddToWatchlist, onCreateWatchlistAndAdd, onShowTrack]);
 
   function attachHandlers(popup: maplibregl.Popup, mmsi: string) {
     attachPopupWatchlistHandlers(popup, mmsi, {
       onAddToWatchlist: (m, w) => onAddToWatchlistRef.current(m, w),
       onCreateWatchlistAndAdd: (m, n) => onCreateWatchlistAndAddRef.current(m, n),
+      onShowTrack: (m) => onShowTrackRef.current(m),
     });
   }
 
@@ -244,6 +282,21 @@ export function MapView({
       map.addSource(SOURCE_ID, {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
+      });
+
+      map.addSource(TRACK_SOURCE_ID, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      // One LineString feature per track segment -- gaps in the data
+      // (PRD FR-008 "preserve gaps") are simply the space between
+      // separate segments, not a connecting line.
+      map.addLayer({
+        id: TRACK_LAYER_ID,
+        type: "line",
+        source: TRACK_SOURCE_ID,
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: { "line-color": "#38bdf8", "line-width": 2, "line-opacity": 0.85 },
       });
 
       // Markers rotate by heading (falling back to COG) with a distinct
@@ -394,6 +447,18 @@ export function MapView({
       }
     }
   }, [vessels]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const source = map?.getSource(TRACK_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+    source?.setData(trackToGeoJson(track));
+  }, [track]);
+
+  useEffect(() => {
+    if (focusBounds) {
+      mapRef.current?.fitBounds(focusBounds, { padding: 60, maxZoom: 12 });
+    }
+  }, [focusBounds]);
 
   if (mapError) {
     return (

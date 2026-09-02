@@ -147,6 +147,19 @@ jobs:
           mmsis = [v['mmsi'] for v in data['vessels']]
           assert '$mmsi' in mmsis, f'{\"$mmsi\"} not in {mmsis}'
           "
+      - name: Confirm the track endpoint works (exercises the same PostGIS cast pattern again)
+        run: |
+          mmsi=$(docker compose -f infra/compose/docker-compose.yml exec -T postgres \
+            psql -U baltic -d baltic -tA -c "SELECT mmsi FROM position_observations LIMIT 1;" | tr -d '\r')
+          status=$(curl -s -o track.json -w '%{http_code}' -b cookies.txt \
+            "http://localhost:8090/api/v1/vessels/$mmsi/track")
+          cat track.json
+          [ "$status" = "200" ] || { echo "track query failed: $status"; exit 1; }
+          python3 -c "
+          import json
+          data = json.load(open('track.json'))
+          assert 'segments' in data and isinstance(data['segments'], list)
+          "
       - name: Dump logs on failure
         if: failure()
         run: docker compose -f infra/compose/docker-compose.yml logs
