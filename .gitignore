@@ -1,0 +1,26 @@
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node / web
+node_modules/
+apps/web/dist/
+apps/web/.vite/
+
+# Editors / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Docker
+*.pid

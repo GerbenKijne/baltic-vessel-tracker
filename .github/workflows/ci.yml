@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r apps/api/requirements-dev.txt
+        working-directory: apps/api
+      - run: ruff check .
+        working-directory: apps/api
+      - run: pytest -q
+        working-directory: apps/api
+
+  worker:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r workers/ingest/requirements-dev.txt
+        working-directory: workers/ingest
+      - run: ruff check .
+        working-directory: workers/ingest
+      - run: pytest -q
+        working-directory: workers/ingest
+        env:
+          TEST_REDIS_URL: redis://localhost:6379/0
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm install
+        working-directory: apps/web
+      - run: npx eslint .
+        working-directory: apps/web
+      - run: npm run build
+        working-directory: apps/web
+
+  compose-smoke-test:
+    runs-on: ubuntu-latest
+    needs: [api, worker, web]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write test .env
+        run: |
+          cat > .env <<EOF
+          POSTGRES_USER=baltic
+          POSTGRES_PASSWORD=baltic-ci-password
+          POSTGRES_DB=baltic
+          BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+          BOOTSTRAP_ADMIN_PASSWORD=ci-admin-password
+          INGEST_ADAPTER=simulator
+          COOKIE_SECURE=false
+          EOF
+      - name: Build and start the stack
+        run: docker compose -f infra/compose/docker-compose.yml --env-file .env up -d --build
+      - name: Wait for API readiness
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/health/ready | grep -q '"status":\s*"ok"'; then
+              echo "API ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "API never became ready"; exit 1
+      - name: Confirm the simulator pipeline reaches the database
+        run: |
+          for i in $(seq 1 30); do
+            count=$(docker compose -f infra/compose/docker-compose.yml exec -T postgres \
+              psql -U baltic -d baltic -tA -c "SELECT count(*) FROM vessel_latest;" || echo 0)
+            if [ "$count" -gt 0 ] 2>/dev/null; then
+              echo "vessel_latest has $count rows"; exit 0
+            fi
+            sleep 2
+          done
+          echo "No simulated vessel data reached the database"; exit 1
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose -f infra/compose/docker-compose.yml logs
+      - name: Tear down
+        if: always()
+        run: docker compose -f infra/compose/docker-compose.yml down -v

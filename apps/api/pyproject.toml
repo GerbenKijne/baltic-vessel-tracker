@@ -1,0 +1,23 @@
+[tool.ruff]
+line-length = 100
+# Kept at py39 (not the py312 the Dockerfile actually runs) so `Optional[X]`/
+# `timezone.utc` aren't "modernized" to 3.10+/3.11+-only syntax (`X | Y`,
+# `datetime.UTC`) that this repo's own dev machine can't run locally for
+# testing (see docs/adr/0001 - no local Docker, system Python is 3.9).
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = [
+    "UP007", # Optional[X], not X | Y -- keeps 3.9 runtime-compatible (see target-version note above)
+    "B008",  # Depends(...) in a default argument is the standard FastAPI pattern, not a bug
+]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]

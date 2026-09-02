@@ -1,0 +1,14 @@
+[tool.ruff]
+line-length = 100
+# See apps/api/pyproject.toml for why this stays at py39.
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = [
+    "UP007", # Optional[X], not X | Y -- keeps 3.9 runtime-compatible (see apps/api/pyproject.toml)
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = [".", "../../packages/contracts/python"]

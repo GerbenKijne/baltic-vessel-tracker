@@ -1,0 +1,186 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #0f1720;
+  color: #e6edf3;
+}
+
+.loading-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 320px;
+  padding: 2rem;
+  background: #1b2733;
+  border-radius: 8px;
+}
+
+.login-form h1 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.login-disclaimer {
+  margin: 0 0 1rem;
+  font-size: 0.8rem;
+  color: #f0a020;
+}
+
+.login-form input {
+  padding: 0.5rem;
+  border-radius: 4px;
+  border: 1px solid #33455a;
+  background: #0f1720;
+  color: #e6edf3;
+}
+
+.login-form button {
+  margin-top: 1rem;
+  padding: 0.6rem;
+  border-radius: 4px;
+  border: none;
+  background: #2563eb;
+  color: white;
+  cursor: pointer;
+}
+
+.login-error {
+  color: #f87171;
+  font-size: 0.85rem;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app-nav {
+  display: flex;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: #1b2733;
+  align-items: center;
+}
+
+.app-nav a {
+  color: #9fb3c8;
+  text-decoration: none;
+}
+
+.app-nav a.active {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.logout-button {
+  margin-left: auto;
+  background: none;
+  border: 1px solid #33455a;
+  color: #e6edf3;
+  padding: 0.35rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.app-content {
+  position: relative;
+  flex: 1;
+}
+
+.map-page {
+  position: absolute;
+  inset: 0;
+}
+
+.legend {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  background: rgba(15, 23, 32, 0.9);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  max-width: 260px;
+}
+
+.legend-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.15rem 0;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot-connected {
+  background: #1a9850;
+}
+
+.dot-disconnected {
+  background: #f87171;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.swatch-live {
+  background: #1a9850;
+}
+
+.swatch-delayed {
+  background: #fdae61;
+}
+
+.swatch-stale {
+  background: #999999;
+}
+
+.legend-disclaimer {
+  margin: 0.5rem 0 0;
+  font-size: 0.7rem;
+  color: #f0a020;
+}
+
+.coming-soon {
+  padding: 2rem;
+}

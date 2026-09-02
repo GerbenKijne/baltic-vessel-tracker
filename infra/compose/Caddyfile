@@ -1,0 +1,11 @@
+# Optional reverse proxy profile (PRD SS16.1). Disabled by default; enable
+# with `docker compose --profile proxy up` once a domain is pointed at this
+# host, and replace the placeholder domain below.
+#
+# your-domain.example {
+#     reverse_proxy web:80
+# }
+
+:80 {
+    reverse_proxy web:80
+}
