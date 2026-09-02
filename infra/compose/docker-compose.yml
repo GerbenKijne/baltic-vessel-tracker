@@ -18,7 +18,11 @@ services:
       timeout: 5s
       retries: 10
     ports:
-      - "127.0.0.1:5432:5432"
+      # Host-side port moved off the 5432 default since it's commonly
+      # already taken (another Postgres instance, another container).
+      # Nothing in this stack needs to reach it from outside Docker;
+      # this is only for an optional local DB client.
+      - "127.0.0.1:15432:5432"
 
   redis:
     image: redis:7-alpine
