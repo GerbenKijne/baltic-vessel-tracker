@@ -14,17 +14,16 @@ enabling any real provider.
   documented caveats (no reliable `observed_at` from AIS's `Timestamp`
   field, `ShipStaticData` doesn't carry a position, MMSI is zero-padded
   from AISStream's integer `UserID`).
-- Capture status: **not run yet**. The tool to run it exists —
-  `workers/ingest/scripts/aisstream_capture.py` — but the actual
-  60-minute measurement across Stockholm, Gothenburg, and Öresund still
-  needs to happen against a real API key (PRD SS12.1). Run it and paste
-  the printed report below.
-- Terms review: **not done**. Confirm storage, display, retention, and
-  combination with other feeds is permitted before persisting any live
-  AISStream data. https://aisstream.io's terms of service haven't been
-  read for this project yet.
+- Capture status: **done, 2026-09-02**. 60-minute capture across all
+  three required boxes, real API key, zero parse errors, zero
+  reconnects, zero positions outside their box. Full report below.
+- Terms review: **still not done**. The capture only tells us the data
+  is *usable*, not that we're *allowed* to store/display/retain it —
+  https://aisstream.io's terms of service still need an actual read
+  before any live AISStream data is persisted in anything but a
+  throwaway/testing setup.
 - **Do not set `INGEST_ADAPTER=aisstream` in a real deployment's `.env`
-  until both of the above are done.**
+  until the terms review above is done.**
 - Docs: https://aisstream.io/documentation
 - Operational limits confirmed from the docs (2026-09-02): 3 subscribed
   connections per account, 3 open connections per IP, 1 subscription
@@ -32,7 +31,84 @@ enabling any real provider.
   of connecting, no uptime SLA, dropped messages if the consumer falls
   behind, reconnect with exponential backoff + jitter (implemented).
 
-<!-- Paste the aisstream_capture.py report here once run -->
+### Capture report (2026-09-02, 60 minutes, all 3 boxes, one connection)
+
+```json
+{
+  "captured_at": "2026-09-02T16:48:05.769624+00:00",
+  "requested_minutes": 60,
+  "actual_minutes": 60.01,
+  "parse_errors": 0,
+  "reconnects": 0,
+  "positions_outside_any_box": 0,
+  "boxes": [
+    {
+      "name": "stockholm",
+      "unique_mmsi": 132,
+      "position_messages": 1918,
+      "position_messages_per_minute": 31.96,
+      "static_messages": 690,
+      "median_update_interval_seconds": 130.0,
+      "field_completeness": {
+        "sog_kn": 1.0, "cog_deg": 0.733, "heading_deg": 0.765, "nav_status": 1.0, "name": 0.0
+      }
+    },
+    {
+      "name": "gothenburg",
+      "unique_mmsi": 132,
+      "position_messages": 1829,
+      "position_messages_per_minute": 30.48,
+      "static_messages": 0,
+      "median_update_interval_seconds": 156.8,
+      "field_completeness": {
+        "sog_kn": 1.0, "cog_deg": 0.884, "heading_deg": 0.792, "nav_status": 1.0, "name": 0.0
+      }
+    },
+    {
+      "name": "oresund",
+      "unique_mmsi": 51,
+      "position_messages": 512,
+      "position_messages_per_minute": 8.53,
+      "static_messages": 0,
+      "median_update_interval_seconds": 180.1,
+      "field_completeness": {
+        "sog_kn": 0.988, "cog_deg": 0.936, "heading_deg": 0.859, "nav_status": 1.0, "name": 0.0
+      }
+    }
+  ],
+  "storage_estimate_90_days_mb": 1754.3
+}
+```
+
+**Reading this:**
+
+- **Coverage is real and usable**: 132 unique vessels in Stockholm and
+  Gothenburg each over the hour, 51 in Öresund (a smaller box); position
+  updates every ~2-3 minutes per vessel on average (median interval
+  130-180s), not the near-real-time cadence a receiver right on top of
+  the traffic would give, but consistent with AISStream's terrestrial
+  aggregation rather than a dedicated local receiver.
+- **`name` field completeness of `0.0` is expected, not a gap**: it's
+  measured only on position-report observations, and names only ever
+  come from `ShipStaticData` (see the adapter note above) — the 690
+  static messages received in the Stockholm box in the same hour prove
+  names *are* available, just via a separate message/observation.
+- **Gothenburg and Öresund got zero `ShipStaticData` messages in a full
+  hour**, despite 132 and 51 unique vessels respectively — at the AIS
+  spec's ~6-minute static broadcast interval that's a real gap, not
+  sampling noise. Static/voyage data (and therefore vessel names) may be
+  unreliable outside Stockholm on this feed; don't assume names will be
+  populated NAS-wide once this adapter is enabled. Worth a longer/repeat
+  capture before relying on this for the vessel-sheet feature (Phase 3).
+- **This one connection stayed comfortably within AISStream's limits**
+  (all 3 boxes, zero reconnects) — no evidence yet that 3 separate
+  connections (one per box) would behave differently, but that wasn't
+  tested.
+- **Storage**: ~1.75 GB estimated for 90 days across all three boxes at
+  this rate (rough per-row estimate, not a measured row size) — small
+  enough that `POSITION_RETENTION_DAYS=90`'s default isn't a concern for
+  this coverage area. Recheck this if the coverage area grows
+  significantly (e.g. adding the rest of the Baltic).
 
 ## BarentsWatch
 
