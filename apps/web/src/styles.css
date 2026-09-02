@@ -175,8 +175,14 @@ body {
   background: #999999;
 }
 
-.legend-disclaimer {
+.legend-hint {
   margin: 0.5rem 0 0;
+  font-size: 0.7rem;
+  color: #9fb3c8;
+}
+
+.legend-disclaimer {
+  margin: 0.35rem 0 0;
   font-size: 0.7rem;
   color: #f0a020;
 }
@@ -211,4 +217,56 @@ body {
   background: #1b2733;
   padding: 0.1rem 0.35rem;
   border-radius: 4px;
+}
+
+/* MapLibre's default popup chrome is light-themed; override to match. */
+.maplibregl-popup-content {
+  background: #1b2733;
+  color: #e6edf3;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.maplibregl-popup-tip {
+  border-top-color: #1b2733 !important;
+  border-bottom-color: #1b2733 !important;
+}
+
+.maplibregl-popup-close-button {
+  color: #9fb3c8;
+  font-size: 1.1rem;
+  padding: 0 0.4rem;
+}
+
+.maplibregl-popup-close-button:hover {
+  background: none;
+  color: #e6edf3;
+}
+
+.vessel-popup h3 {
+  margin: 0 0 0.15rem;
+  font-size: 0.95rem;
+}
+
+.vessel-popup-mmsi {
+  font-size: 0.75rem;
+  color: #9fb3c8;
+  margin-bottom: 0.5rem;
+}
+
+.vessel-popup table {
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.vessel-popup td {
+  padding: 0.15rem 0;
+  vertical-align: top;
+}
+
+.vessel-popup td:first-child {
+  color: #9fb3c8;
+  padding-right: 0.75rem;
+  white-space: nowrap;
 }

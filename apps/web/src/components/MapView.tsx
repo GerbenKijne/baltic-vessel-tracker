@@ -6,6 +6,7 @@ import type { LiveVessel } from "../api/live";
 
 const LIVE_FRESH_SECONDS = 120;
 const STALE_SECONDS = 900;
+const ICON_SIZE = 24;
 
 type Freshness = "live" | "delayed" | "stale";
 
@@ -25,13 +26,89 @@ function vesselsToGeoJson(vessels: Map<string, LiveVessel>): GeoJSON.FeatureColl
       geometry: { type: "Point", coordinates: [vessel.lon, vessel.lat] },
       properties: {
         mmsi: vessel.mmsi,
-        name: vessel.name ?? "Unknown",
         heading: vessel.headingDeg ?? vessel.cogDeg ?? 0,
         hasOrientation: vessel.headingDeg !== null || vessel.cogDeg !== null,
         freshness: freshnessOf(vessel),
       },
     })),
   };
+}
+
+function escapeHtml(value: string): string {
+  const div = document.createElement("div");
+  div.textContent = value;
+  return div.innerHTML;
+}
+
+function formatNavStatus(navStatus: string | null): string {
+  if (!navStatus) return "Unknown";
+  const spaced = navStatus.replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Draws a plain filled shape (not a mathematically correct signed-distance
+ * field, just a hard-edged alpha mask) -- MapLibre's SDF renderer accepts
+ * this as a reasonable approximation at the small icon sizes used here,
+ * and it's what lets a single icon be recolored per-feature via
+ * icon-color instead of pre-baking one image per freshness color. */
+function createArrowIcon(size: number): ImageData {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "black";
+  ctx.beginPath();
+  ctx.moveTo(size * 0.5, size * 0.06);
+  ctx.lineTo(size * 0.85, size * 0.92);
+  ctx.lineTo(size * 0.5, size * 0.72);
+  ctx.lineTo(size * 0.15, size * 0.92);
+  ctx.closePath();
+  ctx.fill();
+  return ctx.getImageData(0, 0, size, size);
+}
+
+function createDotIcon(size: number): ImageData {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "black";
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size * 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  return ctx.getImageData(0, 0, size, size);
+}
+
+function renderVesselPopupHtml(vessel: LiveVessel): string {
+  const freshness = freshnessOf(vessel);
+  const name = vessel.name ? escapeHtml(vessel.name) : "Unknown";
+  const time = vessel.observedAt
+    ? `${new Date(vessel.observedAt).toLocaleString()} (observed)`
+    : `${new Date(vessel.receivedAt).toLocaleString()} (received)`;
+  const rows: [string, string][] = [
+    ["Position", `${vessel.lat.toFixed(4)}, ${vessel.lon.toFixed(4)}`],
+    ["Speed", vessel.sogKn != null ? `${vessel.sogKn.toFixed(1)} kn` : "Unknown"],
+    ["Course", vessel.cogDeg != null ? `${vessel.cogDeg.toFixed(0)}°` : "Unknown"],
+    ["Heading", vessel.headingDeg != null ? `${vessel.headingDeg}°` : "Unknown"],
+    ["Status", formatNavStatus(vessel.navStatus)],
+    ["Freshness", freshness],
+    ["Last position", time],
+  ];
+  if (vessel.qualityFlags.length > 0) {
+    rows.push(["Flags", vessel.qualityFlags.map(escapeHtml).join(", ")]);
+  }
+
+  const rowsHtml = rows
+    .map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${value}</td></tr>`)
+    .join("");
+
+  return (
+    `<div class="vessel-popup">` +
+    `<h3>${name}</h3>` +
+    `<div class="vessel-popup-mmsi">MMSI ${escapeHtml(vessel.mmsi)}</div>` +
+    `<table>${rowsHtml}</table>` +
+    `</div>`
+  );
 }
 
 const SOURCE_ID = "vessels";
@@ -45,6 +122,9 @@ interface Props {
 export function MapView({ vessels, onMoveEnd }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
+  const vesselsRef = useRef(vessels);
+  const popupRef = useRef<maplibregl.Popup | null>(null);
+  const selectedMmsiRef = useRef<string | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -70,18 +150,29 @@ export function MapView({ vessels, onMoveEnd }: Props) {
     });
 
     map.on("load", () => {
+      map.addImage("vessel-arrow", createArrowIcon(ICON_SIZE), { sdf: true });
+      map.addImage("vessel-dot", createDotIcon(ICON_SIZE), { sdf: true });
+
       map.addSource(SOURCE_ID, {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
 
+      // Markers rotate by heading (falling back to COG) with a distinct
+      // glyph -- a dot, not an arrow -- when neither is known (PRD SS7.2).
       map.addLayer({
         id: LAYER_ID,
-        type: "circle",
+        type: "symbol",
         source: SOURCE_ID,
+        layout: {
+          "icon-image": ["case", ["get", "hasOrientation"], "vessel-arrow", "vessel-dot"],
+          "icon-rotate": ["get", "heading"],
+          "icon-rotation-alignment": "map",
+          "icon-allow-overlap": true,
+          "icon-size": 0.75,
+        },
         paint: {
-          "circle-radius": 5,
-          "circle-color": [
+          "icon-color": [
             "match",
             ["get", "freshness"],
             "live",
@@ -92,8 +183,6 @@ export function MapView({ vessels, onMoveEnd }: Props) {
             "#999999",
             "#999999",
           ],
-          "circle-stroke-width": 1,
-          "circle-stroke-color": "#1b2733",
         },
       });
 
@@ -137,6 +226,39 @@ export function MapView({ vessels, onMoveEnd }: Props) {
         },
       });
 
+      map.on("click", LAYER_ID, (e) => {
+        const feature = e.features?.[0];
+        if (!feature || feature.geometry.type !== "Point") return;
+        const mmsi = feature.properties?.mmsi as string | undefined;
+        if (!mmsi) return;
+        const vessel = vesselsRef.current.get(mmsi);
+        if (!vessel) return;
+
+        const lngLat: [number, number] = [vessel.lon, vessel.lat];
+        const html = renderVesselPopupHtml(vessel);
+
+        popupRef.current?.remove();
+        const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, maxWidth: "280px" })
+          .setLngLat(lngLat)
+          .setHTML(html)
+          .addTo(map);
+        popup.on("close", () => {
+          if (selectedMmsiRef.current === mmsi) {
+            selectedMmsiRef.current = null;
+            popupRef.current = null;
+          }
+        });
+        popupRef.current = popup;
+        selectedMmsiRef.current = mmsi;
+      });
+
+      map.on("mouseenter", LAYER_ID, () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", LAYER_ID, () => {
+        map.getCanvas().style.cursor = "";
+      });
+
       const emitBbox = () => {
         const bounds = map.getBounds();
         onMoveEnd({
@@ -159,9 +281,23 @@ export function MapView({ vessels, onMoveEnd }: Props) {
   }, []);
 
   useEffect(() => {
+    vesselsRef.current = vessels;
+
     const map = mapRef.current;
     const source = map?.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
     source?.setData(vesselsToGeoJson(vessels));
+
+    // A selected vessel's popup stays open and up to date as new
+    // positions arrive, tracking it on the map (PRD SS7.2: "Selecting a
+    // vessel pins it through incremental updates").
+    const selectedMmsi = selectedMmsiRef.current;
+    if (selectedMmsi && popupRef.current) {
+      const vessel = vessels.get(selectedMmsi);
+      if (vessel) {
+        popupRef.current.setLngLat([vessel.lon, vessel.lat]);
+        popupRef.current.setHTML(renderVesselPopupHtml(vessel));
+      }
+    }
   }, [vessels]);
 
   if (mapError) {

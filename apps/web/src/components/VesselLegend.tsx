@@ -19,6 +19,9 @@ export function VesselLegend({ connected, vesselCount }: Props) {
       <div className="legend-row">
         <span className="swatch swatch-stale" /> Stale (S) — &gt; 15 min
       </div>
+      <p className="legend-hint">
+        Arrow = heading/course known, dot = unknown. Click a vessel for details.
+      </p>
       <p className="legend-disclaimer">
         Not for navigation. Data may be delayed, incomplete, duplicated, spoofed, or incorrect.
       </p>
