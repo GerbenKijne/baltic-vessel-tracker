@@ -1,0 +1,29 @@
+{
+  "MessageType": "ShipStaticData",
+  "MetaData": {
+    "MMSI": 265547780,
+    "ShipName": "EXAMPLE VESSEL",
+    "Latitude": 0,
+    "Longitude": 0
+  },
+  "Message": {
+    "ShipStaticData": {
+      "MessageID": 5,
+      "RepeatIndicator": 0,
+      "UserID": 265547780,
+      "Valid": true,
+      "AisVersion": 0,
+      "ImoNumber": 9339119,
+      "CallSign": "SEXX",
+      "Name": "EXAMPLE VESSEL",
+      "Type": 70,
+      "Dimension": { "A": 100, "B": 20, "C": 10, "D": 10 },
+      "FixType": 1,
+      "Eta": { "Month": 9, "Day": 15, "Hour": 14, "Minute": 30 },
+      "MaximumStaticDraught": 6.5,
+      "Destination": "STOCKHOLM",
+      "Dte": false,
+      "Spare": false
+    }
+  }
+}

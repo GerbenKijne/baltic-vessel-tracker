@@ -1,6 +1,6 @@
 """Ingestion worker entrypoint: adapter -> parse -> normalize -> dedupe ->
 persist -> publish (PRD SS8.1). Runs the full pipeline for whichever adapter
-is configured; only the simulator is wired up in Phase 1.
+is configured.
 """
 from __future__ import annotations
 
@@ -12,9 +12,10 @@ from canonical import Source
 from redis.asyncio import from_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from .adapters.aisstream import AISStreamAdapter
 from .adapters.base import Adapter
 from .adapters.simulator import SimulatorAdapter
-from .config import load_config
+from .config import WorkerConfig, load_config
 from .dedupe import is_duplicate
 from .normalize import parse_and_normalize
 from .persistence import (
@@ -30,18 +31,30 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def build_adapter(name: str) -> Adapter:
+def build_adapter(config: WorkerConfig) -> Adapter:
+    name = config.adapter
     if name == "simulator":
         return SimulatorAdapter()
+    if name == "aisstream":
+        if not config.aisstream_api_key:
+            raise ValueError(
+                "AISSTREAM_API_KEY is not set. Get a key at https://aisstream.io "
+                "and complete the review in docs/data-source-register.md before "
+                "enabling this adapter."
+            )
+        return AISStreamAdapter(
+            api_key=config.aisstream_api_key,
+            bounding_boxes=config.aisstream_bounding_boxes,
+        )
     raise ValueError(
-        f"Unknown adapter {name!r}. Only 'simulator' is wired up in Phase 1 "
-        "(see docs/data-source-register.md for the others' status)."
+        f"Unknown adapter {name!r}. See docs/data-source-register.md for "
+        "which adapters are actually ready to enable."
     )
 
 
 async def run() -> None:
     config = load_config()
-    adapter = build_adapter(config.adapter)
+    adapter = build_adapter(config)
     source = Source(adapter.source)
 
     engine = create_async_engine(config.database_url, pool_pre_ping=True)
@@ -69,10 +82,15 @@ async def run() -> None:
             if await is_duplicate(redis, obs.dedupe_key):
                 continue
 
+            inserted = False
             async with engine.begin() as conn:
                 await upsert_vessel_identity(conn, obs.mmsi, obs.name)
-                await upsert_vessel_latest(conn, obs)
-                inserted = await insert_position_observation(conn, obs)
+                # Identity-only messages (e.g. AISStream ShipStaticData)
+                # carry no position -- upsert_vessel_latest would otherwise
+                # null out a vessel's last known position/kinematics.
+                if obs.position is not None:
+                    await upsert_vessel_latest(conn, obs)
+                    inserted = await insert_position_observation(conn, obs)
 
             if inserted:
                 await publish_vessel_upsert(redis, obs)

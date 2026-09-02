@@ -9,12 +9,17 @@ spoofed, or incorrect.
 ## Status
 
 Phase 1 walking skeleton (see the PRD's phased plan, SS19, and
-[docs/adr/0001-architecture-baseline.md](docs/adr/0001-architecture-baseline.md)):
-auth, the full canonical database schema, a simulated AIS feed, and a live
-map are wired end to end. Live provider adapters (AISStream, BarentsWatch),
-watchlists, history, geofences/alerts, and hardening are not built yet —
-see [docs/data-source-register.md](docs/data-source-register.md) and the
-PRD for what's still required before any real provider is enabled.
+[docs/adr/0001-architecture-baseline.md](docs/adr/0001-architecture-baseline.md))
+is running live on a self-hosted Docker host: auth, the full canonical
+database schema, a simulated AIS feed, and a live map are wired end to end.
+
+Phase 2's AISStream adapter is **built but not enabled**
+([docs/adr/0002-aisstream-adapter.md](docs/adr/0002-aisstream-adapter.md)) —
+it's gated behind the PRD's mandatory capture spike and a terms-of-service
+review, both still outstanding; see
+[docs/data-source-register.md](docs/data-source-register.md) and
+`workers/ingest/README.md`. BarentsWatch, watchlists, history,
+geofences/alerts, and hardening are not built yet.
 
 ## Stack
 

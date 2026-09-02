@@ -93,6 +93,11 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-baltic}:${POSTGRES_PASSWORD:-baltic}@postgres:5432/${POSTGRES_DB:-baltic}
       REDIS_URL: redis://redis:6379/0
       INGEST_ADAPTER: ${INGEST_ADAPTER:-simulator}
+      # Only used when INGEST_ADAPTER=aisstream -- see
+      # workers/ingest/README.md and docs/data-source-register.md before
+      # enabling this in anything but a throwaway/testing .env.
+      AISSTREAM_API_KEY: ${AISSTREAM_API_KEY:-}
+      AISSTREAM_BOUNDING_BOXES: ${AISSTREAM_BOUNDING_BOXES:-}
     depends_on:
       postgres:
         condition: service_healthy
