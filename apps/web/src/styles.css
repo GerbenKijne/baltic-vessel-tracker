@@ -184,3 +184,31 @@ body {
 .coming-soon {
   padding: 2rem;
 }
+
+.map-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem;
+  gap: 0.5rem;
+}
+
+.map-error h2 {
+  margin: 0;
+}
+
+.map-error p {
+  max-width: 480px;
+  color: #9fb3c8;
+  margin: 0;
+}
+
+.map-error code {
+  background: #1b2733;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}

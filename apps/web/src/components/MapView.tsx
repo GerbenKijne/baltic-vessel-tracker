@@ -1,6 +1,6 @@
 import maplibregl, { type Map as MaplibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { LiveVessel } from "../api/live";
 
@@ -45,18 +45,29 @@ interface Props {
 export function MapView({ vessels, onMoveEnd }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: "https://tiles.openfreemap.org/styles/liberty",
-      // Default viewport: Sweden and the Baltic (PRD SS7.2).
-      center: [18.0, 58.5],
-      zoom: 5,
-    });
+    let map: MaplibreMap;
+    try {
+      map = new maplibregl.Map({
+        container: containerRef.current,
+        style: "https://tiles.openfreemap.org/styles/liberty",
+        // Default viewport: Sweden and the Baltic (PRD SS7.2).
+        center: [18.0, 58.5],
+        zoom: 5,
+      });
+    } catch (err) {
+      setMapError(err instanceof Error ? err.message : "Failed to initialize the map");
+      return;
+    }
     mapRef.current = map;
+
+    map.on("error", (event) => {
+      setMapError(event.error?.message ?? "Map error");
+    });
 
     map.on("load", () => {
       map.addSource(SOURCE_ID, {
@@ -141,6 +152,20 @@ export function MapView({ vessels, onMoveEnd }: Props) {
     const source = map?.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
     source?.setData(vesselsToGeoJson(vessels));
   }, [vessels]);
+
+  if (mapError) {
+    return (
+      <div className="map-error">
+        <h2>Map failed to load</h2>
+        <p>{mapError}</p>
+        <p>
+          This is usually a browser/GPU issue, not a server problem — MapLibre needs WebGL.
+          Try a different browser, enable hardware acceleration, or check{" "}
+          <code>chrome://gpu</code> (or your browser&apos;s equivalent) for WebGL status.
+        </p>
+      </div>
+    );
+  }
 
   return <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />;
 }
