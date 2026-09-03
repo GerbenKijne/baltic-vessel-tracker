@@ -127,6 +127,8 @@ export function MapView({
       setMapError(err instanceof Error ? err.message : "Failed to initialize the map");
       return;
     }
+    // Temporary debugging aid -- remove once the invisible-marker issue is found.
+    (window as unknown as { __map: MaplibreMap }).__map = map;
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 
