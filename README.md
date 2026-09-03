@@ -1,44 +1,69 @@
 # Baltic Vessel Tracker
 
-Self-hosted, provider-agnostic live AIS vessel tracking for Sweden, the
-Baltic, and Norway. Full requirements: [docs/Baltic_Vessel_Tracker_PRD.docx](docs/Baltic_Vessel_Tracker_PRD.docx).
+Self-hosted, provider-agnostic live AIS vessel tracking for the Baltic
+Sea — a MarineTraffic-like map without a 5-vessel watchlist cap, that
+you run yourself. Full original requirements:
+[docs/Baltic_Vessel_Tracker_PRD.docx](docs/Baltic_Vessel_Tracker_PRD.docx)
+(the project has since grown past that document's phased plan; this
+README reflects what's actually built).
 
 **Not for navigation.** Data may be delayed, incomplete, duplicated,
 spoofed, or incorrect.
 
-## Status
+Licensed under [AGPL-3.0](LICENSE) — if you run a modified version of
+this as a network service, you must make your changes' source available
+to its users (see the LICENSE file for the exact terms).
 
-Phase 1 walking skeleton (see the PRD's phased plan, SS19, and
-[docs/adr/0001-architecture-baseline.md](docs/adr/0001-architecture-baseline.md))
-is running live on a self-hosted Docker host: auth, the full canonical
-database schema, a simulated AIS feed, and a live map are wired end to end.
+## What's built
 
-Phase 2's AISStream adapter is **built and cleared to enable**
-([docs/adr/0002-aisstream-adapter.md](docs/adr/0002-aisstream-adapter.md)) —
-the PRD's mandatory capture spike ran clean (60 min, real traffic, zero
-parse errors) and the terms-of-service review found no published terms
-governing the data at all, which this project accepted as an acceptable
-risk given its small, non-commercial, self-hosted scope. See
-[docs/data-source-register.md](docs/data-source-register.md) for the
-full capture results and reasoning, and `workers/ingest/README.md` for
-what a new deployer needs to decide for themselves before flipping
-`INGEST_ADAPTER` to `aisstream`. BarentsWatch, watchlists, history,
-geofences/alerts, and hardening are not built yet.
+- **Live map** (MapLibre GL JS): vessel markers with heading-rotated
+  arrows (shape carries movement state — arrow/square/circle — so
+  freshness color is never the only signal), clustering below zoom 7,
+  click-to-inspect detail drawer, light/dark themes, mobile-responsive
+  floating panels.
+- **Watchlists**: save vessels to named lists, filter the map to just a
+  list's members, CSV/GeoJSON export, CSV import.
+  See [FR-014](docs/Baltic_Vessel_Tracker_PRD.docx).
+- **History**: search any vessel this instance has ever recorded (not
+  just ones currently live or watchlisted) and review its track over a
+  chosen window, with gaps drawn honestly — never bridged into a fake
+  straight-line path.
+- **Alerts**: geofences (circles — draw on the map or enter coordinates,
+  your choice) and rules (enter/exit/stale/speed-above), each with a
+  cooldown and a target (all vessels / one vessel / a watchlist), firing
+  into an in-app event inbox with acknowledgment. Email/webhook delivery
+  and freeform polygon geofences aren't built.
+- **Admin**: per-adapter-instance source health (message/error/reconnect
+  counts, manual cleanup of stale rows), and live-editable retention
+  settings (how long position history is kept for watchlisted vs.
+  ordinary vessels) with a database-size/row-count panel.
+- **Ingestion pipeline**: adapter → parse → normalize → dedupe → persist
+  → publish, with a canonical event schema shared between the API and
+  worker. Currently one real provider (AISStream, Class A + Class B AIS
+  messages) plus a simulator for local dev/CI; see
+  [Data sources](#data-sources) below.
+
+Not built: multi-tenant accounts (this is a single-operator, invite-free
+app — one admin login per deployment), a public/hosted demo, email or
+webhook alert delivery, freeform polygon geofences, a second live data
+source.
 
 ## Stack
 
-- `apps/web` — React + TypeScript + Vite + MapLibre GL JS
+- `apps/web` — React + TypeScript + Vite + MapLibre GL JS + TanStack Query
 - `apps/api` — FastAPI, WebSocket realtime gateway, Alembic migrations
-- `workers/ingest` — provider adapters, normalization, dedupe, persistence
-- `workers/alerts` — placeholder; rule engine is Phase 4
+- `workers/ingest` — provider adapters, normalization, dedupe,
+  persistence, alert-rule evaluation, and the position-retention sweep
+  all run in this one process (see
+  [docs/adr/0003-post-phase1-notes.md](docs/adr/0003-post-phase1-notes.md)
+  for why alert evaluation ended up here instead of a separate
+  `workers/alerts` service, which was the original plan)
 - `packages/contracts` — shared canonical event schema (Python + TypeScript)
 - PostgreSQL 16 + PostGIS, Redis (streams + cache), optional Caddy TLS proxy
 
 ## Running it locally
 
-Requires Docker and Docker Compose. This repo's own dev machine has neither
-available, so this stack is validated in CI (`.github/workflows/ci.yml`),
-not locally — see docs/adr/0001 for why.
+Requires Docker and Docker Compose.
 
 ```bash
 cp .env.example .env   # then edit it — set a real password and admin login
@@ -46,12 +71,46 @@ docker compose -f infra/compose/docker-compose.yml --env-file .env up -d --build
 ```
 
 Then open http://localhost:8090 (or whatever `WEB_PORT` you set in `.env`)
-and sign in with the
-`BOOTSTRAP_ADMIN_EMAIL`/`BOOTSTRAP_ADMIN_PASSWORD` from `.env`. You should
-see a handful of simulated vessels moving around the Stockholm archipelago
-within a few seconds.
+and sign in with the `BOOTSTRAP_ADMIN_EMAIL`/`BOOTSTRAP_ADMIN_PASSWORD`
+from `.env`. You should see a handful of simulated vessels moving around
+the Stockholm archipelago within a few seconds — that's the `simulator`
+adapter, the safe default for a fresh clone.
 
-Full instructions: [docs/runbooks/deploy.md](docs/runbooks/deploy.md).
+Full instructions, including a Synology NAS walkthrough:
+[docs/runbooks/deploy.md](docs/runbooks/deploy.md).
+
+**Important:** always pass `--env-file .env` explicitly on every Compose
+command, even ones that only touch one service. Without it, Compose
+silently falls back to hardcoded defaults instead of erroring — a
+service can end up running with the wrong password or the simulator
+adapter instead of a real one, with no warning at all.
+
+## Data sources
+
+New deployers get the `simulator` adapter (no credentials, fake traffic)
+until they decide otherwise. See
+[docs/data-source-register.md](docs/data-source-register.md) for the
+full due-diligence record on each real provider considered:
+
+- **AISStream** — built, and cleared to enable for this project's own
+  deployment (no published Terms of Service exist for the AIS data
+  itself; accepted as a reasonable risk for a small, non-commercial,
+  self-hosted use — re-evaluate if that changes, e.g. going public or
+  commercial). Each deployer needs their own free API key and should
+  make their own call on the terms gap before setting
+  `INGEST_ADAPTER=aisstream`. Parses both Class A and Class B AIS
+  messages, so sailboats and small craft show up alongside commercial
+  traffic, not just the latter.
+- **BarentsWatch** — investigated and ruled out as a second source: its
+  open-data tier caps a subscription area at 500 km² and is restricted
+  to Norwegian waters, neither of which meaningfully covers the Baltic.
+- **AISHub** — blocked: contributor-only, requires already operating a
+  physical AIS receiver for a week before they'll grant API access.
+- **A local SDR receiver** — not pursued; would need hardware.
+
+Default coverage (`workers/ingest/worker/config.py`'s
+`DEFAULT_BOUNDING_BOXES`, overridable via `AISSTREAM_BOUNDING_BOXES` in
+`.env`) is the entire Baltic Sea.
 
 ## Developing without Docker
 
@@ -77,9 +136,14 @@ cd workers/ingest && pip install -r requirements-dev.txt && ruff check . && pyte
 Their unit tests don't require a database or Redis; a few integration
 tests (e.g. `workers/ingest/tests/test_integration_dedupe.py`) skip
 themselves when `TEST_REDIS_URL`/`TEST_DATABASE_URL` aren't set, which is
-the case outside CI.
+the case outside CI. This repo's own dev environment has no local
+Docker/Postgres either — CI (`.github/workflows/ci.yml`) is the real
+integration test for the Compose stack and container builds; treat a red
+CI run as blocking.
 
 ## Repo layout
 
 See [docs/adr/0001-architecture-baseline.md](docs/adr/0001-architecture-baseline.md)
-for the reasoning; the layout itself follows the PRD's SS20 verbatim.
+for the original reasoning (layout follows the PRD's SS20) and
+[docs/adr/0003-post-phase1-notes.md](docs/adr/0003-post-phase1-notes.md)
+for what's changed since.

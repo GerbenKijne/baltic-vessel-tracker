@@ -4,6 +4,24 @@ Adapter -> parse -> normalize -> dedupe -> persist -> publish (PRD SS8.1).
 Set `INGEST_ADAPTER` to choose which adapter runs; only one runs per
 worker process/container.
 
+This process also runs two periodic/inline jobs that aren't part of that
+pipeline but live here rather than as separate services (see
+`docs/adr/0003-post-phase1-notes.md`):
+
+- **Alert rule evaluation** (`worker/alerts.py`): geofence enter/exit and
+  speed-above rules evaluate inline on every accepted position update
+  (gated on the same "inserted" flag as publishing to the live feed --
+  a duplicate or rejected observation never fires a rule). Stale rules
+  have no incoming message to key off of, so they run on their own
+  60-second sweep instead.
+- **Position retention** (`worker/retention.py`): an hourly-by-default
+  sweep deletes `position_observations` older than the configured
+  window -- a short one for an ordinary vessel, a much longer one for a
+  watchlisted vessel. Settings are read fresh from the database every
+  sweep (the Admin page's "Retention & storage" section writes to it),
+  not from a static env-loaded value, so a change there takes effect on
+  the next sweep without restarting this worker.
+
 ## `simulator` (default)
 
 No credentials, no network calls. Generates plausible fake AIS traffic

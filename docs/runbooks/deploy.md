@@ -53,11 +53,22 @@ docker compose -f infra/compose/docker-compose.yml --env-file .env up -d --build
 The `migrate` service re-runs on every `up`; Alembic migrations are
 idempotent (it's a no-op if already at `head`).
 
-## Switching adapters (Phase 2+)
+## Switching adapters
 
-Set `INGEST_ADAPTER` in `.env` once a real adapter exists. Do not switch
-away from `simulator` until docs/data-source-register.md's capture and
-licence review are complete for that source.
+Set `INGEST_ADAPTER` in `.env` (`aisstream` is the only real one built —
+see `workers/ingest/README.md`). Do not switch away from `simulator`
+until docs/data-source-register.md's capture and terms review are
+complete for that source, and you've made your own call on the terms
+gap it documents.
+
+**Always include `--env-file .env` on every Compose command**, including
+one-off single-service rebuilds. Without it, Compose silently falls back
+to hardcoded defaults instead of erroring — a service can end up running
+the wrong password or the `simulator` adapter instead of a real one,
+with no warning. If a service is behaving as if `.env` doesn't exist
+even though it does, this is the first thing to check:
+`docker compose -f infra/compose/docker-compose.yml --env-file .env config | grep <VAR>`
+to confirm what's actually being resolved.
 
 ## Synology NAS
 

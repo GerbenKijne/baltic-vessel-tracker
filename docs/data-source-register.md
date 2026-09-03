@@ -129,9 +129,32 @@ enabling any real provider.
 
 ## BarentsWatch
 
-- Capture status: **not run**. Needs normalization fixtures run against
-  representative messages; document token lifetime and reconnect behavior.
-- Terms review: **not done**.
+**Ruled out, 2026-09-03 — capped area and wrong geography, not a terms
+or access problem.** Researched their actual developer docs before
+writing any adapter code:
+
+- Auth: OAuth2 client-credentials (self-service, instant signup at
+  barentswatch.no/minside, scope `ais`) — this part would have been
+  straightforward.
+- Connection: an HTTP long-lived streaming POST to
+  `https://live.ais.barentswatch.no/v1/combined`, not a WebSocket like
+  AISStream — a real adapter would need a different shape, not a copy of
+  the AISStream one.
+- **A subscription's area is capped at 500 km².** This project's
+  AISStream box covers the entire Baltic Sea (hundreds of thousands of
+  km²) — BarentsWatch's open tier can only usefully watch something like
+  one fjord or port, not a sea.
+- **Data is Norwegian-waters only.** Norway's coast faces the North
+  Sea/Norwegian Sea/Barents Sea, not the Baltic — the only realistic
+  overlap is the Skagerrak/Oslo-fjord area at the Baltic's southwestern
+  edge.
+- The open feed also excludes fishing vessels under 15m and leisure/
+  sailing vessels under 45m entirely.
+- Capture spike and terms review were never run — the area/geography
+  limits alone make it unsuitable as Baltic-wide redundancy, so there
+  was nothing to gain from running them. Revisit only for a narrow,
+  specific need (e.g. monitoring one named Norwegian port or fjord), not
+  general Baltic coverage.
 - Docs: https://developer.barentswatch.no/docs/AIS/live-ais-api/
 
 ## AISHub
@@ -169,7 +192,14 @@ made, no spike scheduled.
 
 ## Storage sizing
 
-Not estimated yet — depends on the AISStream capture volume (PRD SS12.1,
-"estimate position volume and 90-day storage from the capture before
-setting production defaults"). `POSITION_RETENTION_DAYS=90` in
-`.env.example` is the PRD's suggested starting default, not a measured one.
+The capture spike's ~1.75 GB/90-days estimate above was for the original
+3-box coverage; it does not hold now that the default is the entire
+Baltic Sea (2026-09-03) -- expect substantially more volume, not
+measured yet at this scale. Position history is retention-bounded rather
+than kept forever regardless: `RETENTION_DEFAULT_HOURS`/
+`RETENTION_WATCHLISTED_DAYS` in `.env.example` set the fallback (24h for
+an ordinary vessel, 365d for a watchlisted one), live-editable from the
+Admin page's "Retention & storage" section without restarting anything.
+There is no `POSITION_RETENTION_DAYS` setting -- that PRD-suggested name
+was never implemented; retention shipped as this two-tier scheme instead
+once watchlists existed to define "which vessels matter more."

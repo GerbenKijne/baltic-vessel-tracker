@@ -55,6 +55,12 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
         <button className="btn pri" type="submit" disabled={submitting}>
           {submitting ? "Signing in..." : "Sign in"}
         </button>
+        <p style={{ marginTop: 4, fontSize: 11, color: "var(--faint)" }}>
+          AGPL-3.0 licensed —{" "}
+          <a href="https://github.com/GerbenKijne/baltic-vessel-tracker" target="_blank" rel="noreferrer">
+            source code
+          </a>
+        </p>
       </form>
     </div>
   );

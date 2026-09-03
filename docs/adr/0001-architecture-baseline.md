@@ -1,6 +1,8 @@
 # ADR-0001: Architecture baseline for the Phase 1 walking skeleton
 
-- Status: Accepted
+- Status: Accepted (see [ADR-0003](0003-post-phase1-notes.md) for
+  decisions made after this one, including a couple of deviations from
+  the plan below)
 - Date: 2026-09-02
 
 ## Context

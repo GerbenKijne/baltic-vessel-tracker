@@ -1,6 +1,9 @@
 # ADR-0002: AISStream adapter design
 
-- Status: Accepted
+- Status: Accepted (the bounding boxes described below are the
+  2026-09-02 capture spike's, not the current live config — see
+  [ADR-0003](0003-post-phase1-notes.md) and `docs/data-source-register.md`
+  for how coverage changed after this)
 - Date: 2026-09-02
 
 ## Context
