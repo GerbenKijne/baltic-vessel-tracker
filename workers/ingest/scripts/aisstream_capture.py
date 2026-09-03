@@ -1,10 +1,13 @@
 """Mandatory pre-build capture spike (PRD SS12.1).
 
-Runs a timed capture against the real AISStream feed for the Stockholm,
-Gothenburg, and Öresund bounding boxes and reports exactly what the PRD
-asks for before any live AISStream data may be persisted in production:
-unique MMSIs, position-messages/minute, update intervals, disconnects,
-and field completeness -- plus a rough 90-day storage estimate.
+Runs a timed capture against the real AISStream feed for whatever boxes
+`worker.config.DEFAULT_BOUNDING_BOXES` currently defines (originally
+Stockholm/Gothenburg/Öresund; since 2026-09-03, a single wider box
+covering the Stockholm archipelago, Gotland, Åland, and the southern
+Finnish coast) and reports exactly what the PRD asks for before any live
+AISStream data may be persisted in production: unique MMSIs,
+position-messages/minute, update intervals, disconnects, and field
+completeness -- plus a rough 90-day storage estimate.
 
 This is a standalone diagnostic tool, not part of the running worker.
 It uses the same adapter and parser the real pipeline uses, so a
@@ -12,7 +15,7 @@ successful capture also exercises that code end-to-end.
 
 Usage:
     export AISSTREAM_API_KEY=...          # from https://aisstream.io
-    python -m scripts.aisstream_capture                 # default: 60 minutes, all 3 boxes
+    python -m scripts.aisstream_capture                 # default: 60 minutes, all configured boxes
     python -m scripts.aisstream_capture --minutes 5      # shorter smoke test
     python -m scripts.aisstream_capture --box stockholm  # one box only
 

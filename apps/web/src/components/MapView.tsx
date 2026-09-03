@@ -20,9 +20,28 @@ const LAYER_ID = "vessel-markers";
 const SELECTION_SOURCE_ID = "vessel-selection";
 const SELECTION_LAYER_ID = "vessel-selection-ring";
 const LABEL_LAYER_ID = "vessel-labels";
+const HALO_LAYER_ID = "vessel-halo";
+const CLUSTER_LAYER_ID = "vessel-clusters";
+const CLUSTER_COUNT_LAYER_ID = "vessel-cluster-count";
 const TRACK_SOURCE_ID = "vessel-track";
 const TRACK_LAYER_ID = "vessel-track-line";
 const NAMED_LABEL_MIN_ZOOM = 7;
+// Design handoff: "clustering below zoom 7" -- native MapLibre GeoJSON
+// clustering handles the aggregation; individual markers take over again
+// at/above this zoom, same threshold as the name-label reveal.
+const CLUSTER_MAX_ZOOM = 7;
+// Only individual vessel features carry our own properties (icon,
+// shape, freshness, ...); a cluster's synthetic representative point
+// doesn't, so every vessel-specific layer must exclude it explicitly.
+const NOT_CLUSTER_FILTER: maplibregl.FilterSpecification = ["!", ["has", "point_count"]];
+
+function haloColorForTheme(theme: Theme): string {
+  // A halo whose lightness is the *opposite* of the basemap's makes a
+  // colored marker read as a distinct object rather than blending into
+  // whatever's under it -- a light glow against the dark basemap, a dark
+  // ring against the pale "positron" one.
+  return theme === "light" ? "rgba(10, 14, 18, 0.55)" : "rgba(255, 255, 255, 0.6)";
+}
 
 type Bounds = [[number, number], [number, number]];
 
@@ -122,11 +141,13 @@ export function MapView({
       map = new maplibregl.Map({
         container: containerRef.current,
         style: styleUrlForTheme(theme),
-        // Default viewport: Sweden + Baltic, centre ~59.2N 19.4E (design
-        // handoff), unless a prior theme switch left a viewport to restore.
-        // Zoom clamp 4-12 per the design's map behaviour spec.
-        center: initialView?.center ?? [19.4, 59.2],
-        zoom: initialView?.zoom ?? 6,
+        // Default viewport: centred on the tracked region (Stockholm,
+        // Gotland, Åland, southern Finnish coast -- see
+        // worker/config.py's DEFAULT_BOUNDING_BOXES), unless a prior
+        // theme switch left a viewport to restore. Zoom clamp 4-12 per
+        // the design's map behaviour spec.
+        center: initialView?.center ?? [21.0, 58.9],
+        zoom: initialView?.zoom ?? 5.5,
         minZoom: 4,
         maxZoom: 12,
       });
@@ -183,6 +204,58 @@ export function MapView({
       map.addSource(SOURCE_ID, {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
+        cluster: true,
+        clusterMaxZoom: CLUSTER_MAX_ZOOM,
+        clusterRadius: 50,
+      });
+
+      // Cluster bubbles (design handoff: "aggregate to a grid, bubble
+      // diameter 28/36/44px by count (>40, >120)"). Known simplification:
+      // the handoff also says watchlisted vessels should always escape
+      // their cluster and stay individually drawn -- not implemented,
+      // since that needs a second, unclustered source just for them.
+      map.addLayer({
+        id: CLUSTER_LAYER_ID,
+        type: "circle",
+        source: SOURCE_ID,
+        filter: ["has", "point_count"],
+        paint: {
+          "circle-radius": ["step", ["get", "point_count"], 14, 40, 18, 120, 22],
+          "circle-color": "rgba(6, 52, 62, 0.82)",
+          "circle-stroke-color": "#3a93aa",
+          "circle-stroke-width": 1,
+        },
+      });
+      map.addLayer({
+        id: CLUSTER_COUNT_LAYER_ID,
+        type: "symbol",
+        source: SOURCE_ID,
+        filter: ["has", "point_count"],
+        layout: {
+          "text-field": ["get", "point_count_abbreviated"],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": 11,
+        },
+        paint: { "text-color": "#edf0f3" },
+      });
+
+      // A halo behind each icon so it reads as a distinct marker rather
+      // than blending into the basemap underneath it -- same shape and
+      // rotation as the real icon, just bigger and tinted with a fixed,
+      // theme-contrasting color instead of the data-driven freshness one.
+      map.addLayer({
+        id: HALO_LAYER_ID,
+        type: "symbol",
+        source: SOURCE_ID,
+        filter: NOT_CLUSTER_FILTER,
+        layout: {
+          "icon-image": ["get", "icon"],
+          "icon-rotate": ["case", ["==", ["get", "shape"], "arrow"], ["get", "heading"], 0],
+          "icon-rotation-alignment": "map",
+          "icon-allow-overlap": true,
+          "icon-size": ["*", ["case", ["get", "isSelected"], 0.85, 0.6], 1.45],
+        },
+        paint: { "icon-color": haloColorForTheme(theme), "icon-opacity": 0.85 },
       });
 
       // Shape carries movement state (arrow=under way+oriented,
@@ -193,6 +266,7 @@ export function MapView({
         id: LAYER_ID,
         type: "symbol",
         source: SOURCE_ID,
+        filter: NOT_CLUSTER_FILTER,
         layout: {
           "icon-image": ["get", "icon"],
           // Only the arrow shape encodes a heading -- squares (stopped/
@@ -225,6 +299,7 @@ export function MapView({
         id: LABEL_LAYER_ID,
         type: "symbol",
         source: SOURCE_ID,
+        filter: NOT_CLUSTER_FILTER,
         minzoom: 0,
         layout: {
           "text-field": ["get", "name"],
@@ -238,11 +313,16 @@ export function MapView({
           "text-color": "#edf0f3",
           "text-halo-color": "rgba(14, 23, 31, 0.9)",
           "text-halo-width": 1.2,
+          // A "zoom" expression may only be the top-level input of a
+          // step/interpolate, never nested inside a case/match -- so zoom
+          // has to be the outer expression here, with the isSelected
+          // case as its below-threshold branch, not the other way round.
           "text-opacity": [
-            "case",
-            ["get", "isSelected"],
+            "step",
+            ["zoom"],
+            ["case", ["get", "isSelected"], 1, 0],
+            NAMED_LABEL_MIN_ZOOM,
             1,
-            ["step", ["zoom"], 0, NAMED_LABEL_MIN_ZOOM, 1],
           ],
         },
       });
@@ -261,6 +341,19 @@ export function MapView({
         map.getCanvas().style.cursor = "pointer";
       });
       map.on("mouseleave", LAYER_ID, () => {
+        map.getCanvas().style.cursor = "";
+      });
+
+      // Design handoff: "Cluster click -> zoom +2 to centroid."
+      map.on("click", CLUSTER_LAYER_ID, (e) => {
+        const feature = e.features?.[0];
+        if (!feature || feature.geometry.type !== "Point") return;
+        map.easeTo({ center: feature.geometry.coordinates as [number, number], zoom: map.getZoom() + 2 });
+      });
+      map.on("mouseenter", CLUSTER_LAYER_ID, () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", CLUSTER_LAYER_ID, () => {
         map.getCanvas().style.cursor = "";
       });
 

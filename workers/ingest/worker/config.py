@@ -3,16 +3,19 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional
 
-# Approximate starting boxes for the PRD SS12.1 mandatory capture spike
-# (Stockholm, Gothenburg, Öresund). [[lat, lon], [lat, lon]] per box,
-# matching AISStream's documented BoundingBoxes order (confirmed against
+# Originally three small starting boxes for the PRD SS12.1 mandatory
+# capture spike (Stockholm, Gothenburg, Öresund/Copenhagen) -- that spike
+# is done (docs/data-source-register.md) and those results stay valid as
+# a historical record even though the boxes below have since changed.
+# Replaced 2026-09-03 with a single wider box per the user's own choice:
+# drop Gothenburg/Öresund, focus on the Stockholm area but expand it to
+# also cover Gotland, Åland, and the southern Finnish coast (Turku/
+# Helsinki). [[lat, lon], [lat, lon]] (SW corner, NE corner), matching
+# AISStream's documented BoundingBoxes order (confirmed against
 # https://github.com/aisstream/example's python sample, since the
-# corners' magnitudes only make sense as lat/lon, not lon/lat). Adjust
-# after the actual capture if these turn out to miss traffic.
+# corners' magnitudes only make sense as lat/lon, not lon/lat).
 DEFAULT_BOUNDING_BOXES: list[list[list[float]]] = [
-    [[59.1, 17.8], [59.5, 18.9]],  # Stockholm
-    [[57.5, 11.6], [57.9, 12.1]],  # Gothenburg
-    [[55.4, 12.4], [56.0, 13.0]],  # Öresund
+    [[56.7, 17.3], [60.7, 25.2]],  # Stockholm, Gotland, Åland, southern Finnish coast
 ]
 
 
