@@ -1,5 +1,15 @@
+import { useState } from "react";
+
 import type { LiveVessel } from "../api/live";
 import { freshnessForTime, FRESHNESS_LABEL, FRESHNESS_THRESHOLD_LABEL, type Freshness } from "../freshness";
+
+// Open by default on desktop, where it's a small corner panel; collapsed
+// on mobile, where the same content used to cover most of the screen.
+// Computed once at mount (not reactive to resize) so a user's manual
+// toggle afterward is never overridden.
+function defaultOpen(): boolean {
+  return typeof window === "undefined" || !window.matchMedia("(max-width: 680px)").matches;
+}
 
 const FRESHNESS_ORDER: Freshness[] = ["live", "delayed", "stale", "dark"];
 
@@ -32,6 +42,7 @@ interface Props {
 }
 
 export function LegendPanel({ vessels }: Props) {
+  const [open] = useState(defaultOpen);
   const counts: Record<Freshness, number> = { live: 0, delayed: 0, stale: 0, dark: 0 };
   for (const v of vessels.values()) {
     counts[freshnessForTime(v.observedAt ?? v.receivedAt)]++;
@@ -39,7 +50,7 @@ export function LegendPanel({ vessels }: Props) {
   const total = vessels.size;
 
   return (
-    <details className="float map-legend-panel" open>
+    <details className="float map-legend-panel" open={open}>
       <summary className="eyebrow" style={{ padding: "8px 12px" }}>
         Legend
       </summary>

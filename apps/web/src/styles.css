@@ -102,6 +102,12 @@ button {
   display: grid;
   grid-template-columns: 56px 1fr;
   height: 100vh;
+  /* On mobile, 100vh is the *tallest* the viewport ever gets (browser
+     chrome collapsed) -- dvh tracks the address bar showing/hiding, so
+     the app doesn't overflow its own height and force page scrolling on
+     the actual visible viewport. Falls back to vh on older browsers by
+     just staying whatever the first declaration set. */
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -633,6 +639,7 @@ table.t .unk {
   align-items: center;
   justify-content: center;
   height: 100vh;
+  height: 100dvh;
 }
 
 .login-form {
@@ -680,6 +687,7 @@ table.t .unk {
   align-items: center;
   justify-content: center;
   height: 100vh;
+  height: 100dvh;
   color: var(--faint);
 }
 
@@ -959,6 +967,13 @@ table.t .unk {
   margin-top: 8px;
 }
 
+.map-reconnecting-banner {
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+}
+
 /* degradation banner */
 
 .map-banner {
@@ -1228,4 +1243,84 @@ table.t .unk {
 .vlabel-live {
   border-color: var(--live);
   color: var(--live);
+}
+
+/* ---------- mobile ---------- */
+
+/* Groups the Map screen's independently-positioned floating panels so
+   they can be stacked in one column on narrow viewports instead of each
+   claiming its own screen corner with a fixed pixel width -- which is
+   exactly what caused them to overlap on phones (e.g. the search panel's
+   312px from the left and the watchlist panel's 296px from the right
+   don't both fit on a 375px-wide screen). `display: contents` makes this
+   wrapper invisible to layout on desktop, so each child's own `.float`
+   positioning (top/left/right/bottom corner) is completely unaffected
+   there -- the stacking only kicks in under the media query below. */
+.map-panel-stack {
+  display: contents;
+}
+
+@media (max-width: 680px) {
+  .map-panel-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    z-index: 500;
+    max-height: calc(100% - 16px);
+    overflow-y: auto;
+  }
+
+  .map-panel-stack > .float {
+    position: static;
+    top: auto;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    width: auto;
+    transform: none;
+  }
+
+  /* Full width instead of a fixed 344px, which would overflow most phone
+     screens; still a full-height detail panel, just not corner-anchored. */
+  .drawer {
+    left: 8px;
+    right: 8px;
+    width: auto;
+  }
+
+  /* Secondary screens (Watchlists/History/Admin): a 246px fixed sidebar
+     alongside content leaves almost nothing for the content itself on a
+     narrow phone. Stack it above instead, capped so the actual page
+     content is still reachable without excessive scrolling. */
+  .body {
+    flex-direction: column;
+  }
+
+  .side {
+    width: auto;
+    max-height: 45vh;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .login-form {
+    width: calc(100vw - 2.5rem);
+    max-width: 320px;
+  }
+
+  .watchlists-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Filter/sort/view-mode controls would otherwise overflow a narrow
+     screen in one unwrapped row. */
+  .toolbar,
+  .history-toolbar {
+    flex-wrap: wrap;
+    height: auto;
+  }
 }

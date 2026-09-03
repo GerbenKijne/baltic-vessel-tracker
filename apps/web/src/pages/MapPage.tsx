@@ -158,38 +158,40 @@ export function MapPage() {
         theme={theme}
       />
 
-      <SearchPanel
-        vessels={vessels}
-        onSelectVessel={handleSelectVessel}
-        freshnessFilter={freshnessFilter}
-        onToggleFreshnessFilter={toggleFreshnessFilter}
-      />
+      <div className="map-panel-stack">
+        <DegradationBanner sources={sourcesQuery.data ?? []} />
 
-      <WatchlistPanel
-        watchlists={watchlistsQuery.data ?? []}
-        selectedId={selectedWatchlistId}
-        onSelectList={handleSelectWatchlist}
-        detail={watchlistDetail}
-        onFocusVessel={handleSelectVessel}
-        dimmed={selectedMmsi !== null}
-        watchlistOnly={watchlistOnly}
-        onToggleWatchlistOnly={() => setWatchlistOnly((v) => !v)}
-      />
+        {!connected && (
+          <div className="float map-reconnecting-banner">
+            <span className="fx delayed">
+              <i />
+              Reconnecting…
+            </span>
+          </div>
+        )}
 
-      <SourcePanel sources={sourcesQuery.data ?? []} />
+        <SearchPanel
+          vessels={vessels}
+          onSelectVessel={handleSelectVessel}
+          freshnessFilter={freshnessFilter}
+          onToggleFreshnessFilter={toggleFreshnessFilter}
+        />
 
-      <LegendPanel vessels={vessels} />
+        <WatchlistPanel
+          watchlists={watchlistsQuery.data ?? []}
+          selectedId={selectedWatchlistId}
+          onSelectList={handleSelectWatchlist}
+          detail={watchlistDetail}
+          onFocusVessel={handleSelectVessel}
+          dimmed={selectedMmsi !== null}
+          watchlistOnly={watchlistOnly}
+          onToggleWatchlistOnly={() => setWatchlistOnly((v) => !v)}
+        />
 
-      <DegradationBanner sources={sourcesQuery.data ?? []} />
+        <SourcePanel sources={sourcesQuery.data ?? []} />
 
-      {!connected && (
-        <div className="float" style={{ top: 10, left: "50%", transform: "translateX(-50%)", padding: "6px 12px" }}>
-          <span className="fx delayed">
-            <i />
-            Reconnecting…
-          </span>
-        </div>
-      )}
+        <LegendPanel vessels={vessels} />
+      </div>
 
       {selectedVessel && (
         <VesselDrawer
