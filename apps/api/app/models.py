@@ -195,3 +195,18 @@ class SourceStatus(Base):
     error_count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     reconnect_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class RetentionSettings(Base):
+    """Singleton row (id is always 1) -- the ingest worker's retention
+    sweep (workers/ingest/worker/retention.py) reads this table fresh on
+    every sweep instead of a static env-loaded value, so an admin change
+    here takes effect on the next sweep without restarting the worker."""
+
+    __tablename__ = "retention_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    default_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
+    watchlisted_days: Mapped[int] = mapped_column(Integer, nullable=False, default=365)
+    sweep_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=3600)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

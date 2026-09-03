@@ -101,3 +101,16 @@ source_status = Table(
     Column("reconnect_count", Integer, nullable=False),
     Column("error_summary", Text, nullable=True),
 )
+
+# Singleton row (id=1), managed by the API's Admin "Retention & storage"
+# controls -- the retention sweep reads it fresh every run so a change
+# there takes effect without restarting this worker.
+retention_settings = Table(
+    "retention_settings",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("default_hours", Integer, nullable=False),
+    Column("watchlisted_days", Integer, nullable=False),
+    Column("sweep_interval_seconds", Integer, nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)

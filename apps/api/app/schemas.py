@@ -114,3 +114,26 @@ class SourceStatusOut(BaseModel):
     error_count: int
     reconnect_count: int
     error_summary: Optional[str]
+
+
+class RetentionSettingsOut(BaseModel):
+    default_hours: int
+    watchlisted_days: int
+    sweep_interval_seconds: int
+    updated_at: datetime
+
+
+class RetentionSettingsUpdate(BaseModel):
+    default_hours: int = Field(ge=1, le=8760)  # 1 hour .. 1 year
+    watchlisted_days: int = Field(ge=1, le=3650)  # 1 day .. 10 years
+    sweep_interval_seconds: int = Field(ge=60, le=86400)  # 1 min .. 1 day
+
+
+class TableStorageOut(BaseModel):
+    name: str
+    estimated_row_count: int
+
+
+class StorageStatsOut(BaseModel):
+    database_size_bytes: int
+    tables: list[TableStorageOut]
