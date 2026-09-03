@@ -89,6 +89,7 @@ class PositionObservation(Base):
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     source: Mapped[str] = mapped_column(String(30), nullable=False)
     quality_flags: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    sog_kn: Mapped[Optional[float]] = mapped_column(Numeric, nullable=True)
 
 
 class RawMessage(Base):

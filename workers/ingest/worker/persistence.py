@@ -63,6 +63,7 @@ async def insert_position_observation(conn: AsyncConnection, obs: CanonicalAisOb
         received_at=obs.received_at,
         source=obs.source.value,
         quality_flags=[f.value for f in obs.quality_flags],
+        sog_kn=obs.sog_kn,
     )
     stmt = stmt.on_conflict_do_nothing(index_elements=[position_observations.c.dedupe_key])
     result = await conn.execute(stmt)

@@ -221,6 +221,10 @@ export function HistoryPage() {
                 <span style={{ color: "var(--faint)" }}>Select a vessel to query its track.</span>
               ) : trackQuery.isLoading ? (
                 <span style={{ color: "var(--faint)" }}>Loading…</span>
+              ) : trackQuery.isError ? (
+                <span style={{ color: "var(--stale)" }}>
+                  Couldn't load this track: {(trackQuery.error as Error).message}
+                </span>
               ) : stats ? (
                 <>
                   <div style={{ display: "flex" }}>
@@ -289,15 +293,17 @@ export function HistoryPage() {
           ) : (
             <>
               <div className="history-toolbar">
-                <span className="fx live">
+                <span className={trackQuery.isError ? "fx stale" : "fx live"}>
                   <i />
                   {trackQuery.isLoading
                     ? "Loading track…"
-                    : track
-                      ? `Track drawn from ${track.point_count} accepted observation${
-                          track.point_count === 1 ? "" : "s"
-                        }${track.truncated ? " (decimated)" : ""}`
-                      : "No data in this window"}
+                    : trackQuery.isError
+                      ? "Couldn't load this track"
+                      : track
+                        ? `Track drawn from ${track.point_count} accepted observation${
+                            track.point_count === 1 ? "" : "s"
+                          }${track.truncated ? " (decimated)" : ""}`
+                        : "No data in this window"}
                 </span>
                 <div style={{ flex: 1 }} />
                 <span className="chip" style={{ minWidth: 280, textAlign: "right" }}>

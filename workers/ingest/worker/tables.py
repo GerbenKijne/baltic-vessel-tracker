@@ -64,6 +64,7 @@ position_observations = Table(
     Column("received_at", DateTime(timezone=True), nullable=False),
     Column("source", String(30), nullable=False),
     Column("quality_flags", ARRAY(Text), nullable=False),
+    Column("sog_kn", Numeric, nullable=True),
 )
 
 raw_messages = Table(
