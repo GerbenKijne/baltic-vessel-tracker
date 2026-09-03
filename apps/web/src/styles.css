@@ -1332,6 +1332,19 @@ table.t .unk {
   background: var(--live);
 }
 
+.geofence-draw-map {
+  height: 220px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+}
+
+.geofence-draw-hint {
+  padding: 6px 0 0;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
 /* ---------- mobile ---------- */
 
 /* Groups the Map screen's independently-positioned floating panels so

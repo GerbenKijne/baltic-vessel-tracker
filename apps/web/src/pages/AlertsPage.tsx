@@ -12,8 +12,10 @@ import {
 } from "../api/alertRules";
 import { geofencesApi } from "../api/geofences";
 import { watchlistsApi } from "../api/watchlists";
+import { GeofenceMapView } from "../components/GeofenceMapView";
 import { TopBar } from "../components/TopBar";
 import { formatAgeForTime } from "../freshness";
+import { useTheme } from "../ThemeContext";
 
 const RULE_TYPE_LABEL: Record<AlertRuleType, string> = {
   geofence_enter: "Entered",
@@ -88,6 +90,7 @@ function describeRule(rule: AlertRule): string {
 }
 
 export function AlertsPage() {
+  const { theme } = useTheme();
   const queryClient = useQueryClient();
 
   const rulesQuery = useQuery({ queryKey: ["alert-rules"], queryFn: alertRulesApi.list });
@@ -111,6 +114,18 @@ export function AlertsPage() {
   const [gfLon, setGfLon] = useState("");
   const [gfRadiusKm, setGfRadiusKm] = useState("");
   const [gfError, setGfError] = useState<string | null>(null);
+
+  const gfCenterLon = gfLon.trim() && Number.isFinite(Number(gfLon)) ? Number(gfLon) : null;
+  const gfCenterLat = gfLat.trim() && Number.isFinite(Number(gfLat)) ? Number(gfLat) : null;
+  const gfRadiusM =
+    gfRadiusKm.trim() && Number.isFinite(Number(gfRadiusKm)) ? Number(gfRadiusKm) * 1000 : null;
+
+  function handleMapDraw(centerLon: number, centerLat: number, radiusM: number | null) {
+    setGfLon(centerLon.toFixed(5));
+    setGfLat(centerLat.toFixed(5));
+    setGfRadiusKm(radiusM != null ? (radiusM / 1000).toFixed(2) : "");
+    setGfError(null);
+  }
 
   const createRuleMutation = useMutation({
     mutationFn: alertRulesApi.create,
@@ -349,6 +364,14 @@ export function AlertsPage() {
               ))}
             </div>
             <div style={{ display: "grid", gap: 5, marginTop: 8 }}>
+              <GeofenceMapView
+                theme={theme}
+                existingGeofences={geofences}
+                centerLon={gfCenterLon}
+                centerLat={gfCenterLat}
+                radiusM={gfRadiusM}
+                onChange={handleMapDraw}
+              />
               <input
                 className="input"
                 placeholder="Name"
@@ -383,8 +406,7 @@ export function AlertsPage() {
               </button>
             </div>
             <div style={{ color: "var(--faint)", fontSize: 10.5, marginTop: 8 }}>
-              Circles only for now — enter coordinates and a radius. Drawing a shape on the map
-              isn't built yet.
+              Circles only for now — freeform polygon drawing isn't built yet.
             </div>
           </div>
         </aside>
