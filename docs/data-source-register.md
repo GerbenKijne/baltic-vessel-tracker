@@ -9,11 +9,17 @@ enabling any real provider.
 - **Adapter: built** (`workers/ingest/worker/adapters/aisstream.py`,
   `worker/normalize.py`'s `_extract_aisstream`), against the real schema
   in https://github.com/aisstream/ais-message-models
-  (`type-definition.yaml`) — not guessed. Only `PositionReport` and
-  `ShipStaticData` are parsed; see `workers/ingest/README.md` for the
-  documented caveats (no reliable `observed_at` from AIS's `Timestamp`
-  field, `ShipStaticData` doesn't carry a position, MMSI is zero-padded
-  from AISStream's integer `UserID`).
+  (`type-definition.yaml`) — not guessed. Parses `PositionReport` and
+  `ShipStaticData` (Class A) plus, since 2026-09-03,
+  `StandardClassBPositionReport`/`ExtendedClassBPositionReport`/
+  `StaticDataReport` (Class B — what nearly all sailboats, pleasure
+  craft, and small fishing boats actually carry; the original adapter
+  only subscribed to the Class A message names, which silently excluded
+  that entire category, not a coverage/hardware gap). See
+  `workers/ingest/README.md` for the documented caveats (no reliable
+  `observed_at` from AIS's `Timestamp` field, static-data messages don't
+  carry a position, MMSI is zero-padded from AISStream's integer
+  `UserID`, Class B position reports never carry navigational status).
 - Capture status: **done, 2026-09-02**. 60-minute capture across all
   three required boxes, real API key, zero parse errors, zero
   reconnects, zero positions outside their box. Full report below.

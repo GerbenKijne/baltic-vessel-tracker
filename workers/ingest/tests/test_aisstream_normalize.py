@@ -94,3 +94,50 @@ def test_unsupported_message_type_is_rejected() -> None:
     }
     with pytest.raises(ValueError):
         parse_and_normalize(raw, Source.AISSTREAM)
+
+
+def test_parses_standard_class_b_position_report() -> None:
+    obs = parse_and_normalize(_load("standard_class_b_position_report.json"), Source.AISSTREAM)
+    assert obs.mmsi == "265999888"
+    assert obs.position is not None
+    assert obs.sog_kn == pytest.approx(5.4)
+    assert obs.cog_deg == pytest.approx(210.0)
+    assert obs.heading_deg == 208
+    assert obs.message_type == 18
+    # Class B position reports don't carry navigational status at all.
+    assert obs.nav_status is None
+
+
+def test_parses_extended_class_b_position_report_with_inline_name() -> None:
+    obs = parse_and_normalize(_load("extended_class_b_position_report.json"), Source.AISSTREAM)
+    assert obs.mmsi == "265999777"
+    assert obs.position is not None
+    assert obs.message_type == 19
+    # Unlike Class A, Extended Class B carries identity inline rather than
+    # in a separate static-data message.
+    assert obs.name == "SEA BREEZE"
+
+
+def test_static_data_report_part_a_has_the_name() -> None:
+    obs = parse_and_normalize(_load("static_data_report_part_a.json"), Source.AISSTREAM)
+    assert obs.mmsi == "265999888"
+    assert obs.position is None
+    assert obs.name == "WINDFLOWER"
+    assert obs.message_type == 24
+
+
+def test_static_data_report_part_b_has_no_name() -> None:
+    obs = parse_and_normalize(_load("static_data_report_part_b.json"), Source.AISSTREAM)
+    assert obs.mmsi == "265999888"
+    assert obs.position is None
+    assert obs.name is None
+    assert obs.message_type == 24
+
+
+def test_static_data_report_parts_a_and_b_do_not_collide_in_the_same_minute() -> None:
+    # Both parts share an MMSI and can land in the same minute bucket;
+    # without a discriminator in the identity dedupe key, one would look
+    # like a duplicate of the other and get silently dropped.
+    part_a = parse_and_normalize(_load("static_data_report_part_a.json"), Source.AISSTREAM)
+    part_b = parse_and_normalize(_load("static_data_report_part_b.json"), Source.AISSTREAM)
+    assert part_a.dedupe_key != part_b.dedupe_key

@@ -48,7 +48,19 @@ class AISStreamAdapter(Adapter):
             raise ValueError("AISStream adapter requires an API key")
         self._api_key = api_key
         self._bounding_boxes = bounding_boxes
-        self._message_types = message_types or ["PositionReport", "ShipStaticData"]
+        # "PositionReport" is Class A only (large/commercial vessels).
+        # Class B -- what nearly all sailboats, pleasure craft, and small
+        # fishing boats actually carry -- reports under two entirely
+        # different, separately-filterable message type names; omitting
+        # them (as this adapter originally did) silently drops that whole
+        # category of vessel from the feed, not a hardware/coverage gap.
+        self._message_types = message_types or [
+            "PositionReport",
+            "StandardClassBPositionReport",
+            "ExtendedClassBPositionReport",
+            "ShipStaticData",
+            "StaticDataReport",
+        ]
         self._mmsi_filter = mmsi_filter
 
     def _subscription_message(self) -> dict:

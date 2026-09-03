@@ -1,0 +1,31 @@
+{
+  "MessageType": "StaticDataReport",
+  "MetaData": {
+    "MMSI": 265999888,
+    "ShipName": "WINDFLOWER",
+    "Latitude": 0,
+    "Longitude": 0
+  },
+  "Message": {
+    "StaticDataReport": {
+      "MessageID": 24,
+      "RepeatIndicator": 0,
+      "UserID": 265999888,
+      "Valid": true,
+      "Reserved": 0,
+      "PartNumber": true,
+      "ReportA": { "Valid": false, "Name": "" },
+      "ReportB": {
+        "Valid": true,
+        "ShipType": 36,
+        "VendorIDName": "ABC",
+        "VenderIDModel": 1,
+        "VenderIDSerial": 12345,
+        "CallSign": "SM1234",
+        "Dimension": { "A": 8, "B": 2, "C": 2, "D": 2 },
+        "FixType": 1,
+        "Spare": 0
+      }
+    }
+  }
+}

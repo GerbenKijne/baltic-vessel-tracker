@@ -1,0 +1,35 @@
+{
+  "MessageType": "StandardClassBPositionReport",
+  "MetaData": {
+    "MMSI": 265999888,
+    "ShipName": "",
+    "Latitude": 59.31,
+    "Longitude": 18.05
+  },
+  "Message": {
+    "StandardClassBPositionReport": {
+      "MessageID": 18,
+      "RepeatIndicator": 0,
+      "UserID": 265999888,
+      "Valid": true,
+      "Spare1": 0,
+      "Sog": 5.4,
+      "PositionAccuracy": true,
+      "Longitude": 18.05,
+      "Latitude": 59.31,
+      "Cog": 210.0,
+      "TrueHeading": 208,
+      "Timestamp": 12,
+      "Spare2": 0,
+      "ClassBUnit": false,
+      "ClassBDisplay": false,
+      "ClassBDsc": true,
+      "ClassBBand": true,
+      "ClassBMsg22": true,
+      "AssignedMode": false,
+      "Raim": false,
+      "CommunicationStateIsItdma": true,
+      "CommunicationState": 0
+    }
+  }
+}

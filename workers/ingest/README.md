@@ -25,13 +25,23 @@ terms review are both done for *this* deployment — see
   (`type-definition.yaml` is the source of truth this adapter's parser
   was built against — re-check it if AISStream changes their schema)
 - Requires `AISSTREAM_API_KEY` (free signup at https://aisstream.io).
-- Only `PositionReport` and `ShipStaticData` are parsed (PRD SS12's
-  "position/static messages" scope) — AISStream supports 25 message
-  types total; the rest are out of scope for V1.
-- `ShipStaticData` carries no position; it only updates the vessel's
-  name via `upsert_vessel_identity`. IMO/callsign/destination/dimensions
-  from that message type aren't extracted yet — that's Phase 3 "vessel
-  sheet" scope (PRD SS19), not required for the ingestion pipeline itself.
+- Parses Class A (`PositionReport`, `ShipStaticData`) and Class B
+  (`StandardClassBPositionReport`, `ExtendedClassBPositionReport`,
+  `StaticDataReport`) position/static messages (PRD SS12's "position/
+  static messages" scope) — AISStream supports 25 message types total;
+  the rest (safety broadcasts, binary messages, base station reports,
+  etc.) are out of scope for V1. Class B is what nearly all sailboats,
+  pleasure craft, and small fishing boats actually carry, and never
+  reports navigational status (that field simply doesn't exist on those
+  message types, unlike Class A).
+- `ShipStaticData` and `StaticDataReport` carry no position; they only
+  update the vessel's name via `upsert_vessel_identity`.
+  `StaticDataReport` splits across two messages sharing an MMSI (`PartNumber`
+  false = name, true = type/callsign/dimensions) — only the name is
+  extracted, same scope cut as `ShipStaticData`. IMO/callsign/destination/
+  dimensions aren't extracted yet from either message type — that's
+  Phase 3 "vessel sheet" scope (PRD SS19), not required for the ingestion
+  pipeline itself.
 - AIS's `PositionReport.Timestamp` field is only the UTC *second* the
   report was generated (0-59), not a usable full timestamp on its own —
   this adapter does not attempt to reconstruct one from it.

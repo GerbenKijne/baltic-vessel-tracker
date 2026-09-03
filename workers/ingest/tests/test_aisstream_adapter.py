@@ -27,7 +27,16 @@ def test_subscription_message_includes_mmsi_filter_when_given() -> None:
     assert message["FiltersShipMMSI"] == ["265123456"]
 
 
-def test_default_message_types_are_position_and_static() -> None:
+def test_default_message_types_include_class_b() -> None:
+    # Class B (18/19) is what nearly all sailboats, pleasure craft, and
+    # small fishing boats actually carry -- omitting them silently drops
+    # that whole category, not a hardware/coverage gap.
     adapter = AISStreamAdapter(api_key="test-key", bounding_boxes=[[[59.0, 18.0], [60.0, 19.0]]])
     message = adapter._subscription_message()
-    assert message["FilterMessageTypes"] == ["PositionReport", "ShipStaticData"]
+    assert message["FilterMessageTypes"] == [
+        "PositionReport",
+        "StandardClassBPositionReport",
+        "ExtendedClassBPositionReport",
+        "ShipStaticData",
+        "StaticDataReport",
+    ]

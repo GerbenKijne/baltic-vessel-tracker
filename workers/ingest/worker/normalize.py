@@ -51,6 +51,9 @@ _NAV_STATUS_MAP = {
 # expects, regardless of how a given provider names things over the wire.
 _AIS_MSG_TYPE_POSITION_REPORT_CLASS_A = 1
 _AIS_MSG_TYPE_STATIC_AND_VOYAGE_DATA = 5
+_AIS_MSG_TYPE_STANDARD_CLASS_B_POSITION_REPORT = 18
+_AIS_MSG_TYPE_EXTENDED_CLASS_B_POSITION_REPORT = 19
+_AIS_MSG_TYPE_STATIC_DATA_REPORT = 24
 
 
 @dataclass
@@ -68,6 +71,12 @@ class _ExtractedFields:
     callsign: Optional[str] = None
     destination: Optional[str] = None
     quality_flags: list[QualityFlag] = field(default_factory=list)
+    # Distinguishes payloads that would otherwise collide in the
+    # minute-bucketed identity dedupe key -- e.g. StaticDataReport's Part
+    # A and Part B are genuinely different messages that can land in the
+    # same minute; without this, whichever arrives first silently causes
+    # the other to be dropped as a "duplicate".
+    identity_discriminator: str = ""
 
 
 def _clean_text(value: Optional[str]) -> Optional[str]:
@@ -85,12 +94,16 @@ def compute_dedupe_key(
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def compute_identity_dedupe_key(source: str, mmsi: str, bucket_start: datetime) -> str:
+def compute_identity_dedupe_key(
+    source: str, mmsi: str, bucket_start: datetime, discriminator: str = ""
+) -> str:
     """Dedupe basis for messages with no position (e.g. static/voyage data),
     which repeat far less often than position reports -- bucketed by minute
-    rather than second."""
+    rather than second. `discriminator` keeps genuinely different payloads
+    that can land in the same minute (StaticDataReport's Part A vs Part B)
+    from colliding on the same key."""
     bucket = bucket_start.replace(microsecond=0, second=0).isoformat()
-    raw = f"{source}:{mmsi}:identity:{bucket}"
+    raw = f"{source}:{mmsi}:identity:{discriminator}:{bucket}"
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
@@ -115,10 +128,20 @@ def _extract_simulator(raw: dict) -> _ExtractedFields:
     )
 
 
+_POSITION_MESSAGE_TYPES = {
+    "PositionReport": _AIS_MSG_TYPE_POSITION_REPORT_CLASS_A,
+    # Class B (18/19) covers what nearly all sailboats, pleasure craft,
+    # and small fishing boats actually carry -- neither reports
+    # NavigationalStatus at all (that's Class-A-only), so it's simply
+    # left absent rather than guessed at.
+    "StandardClassBPositionReport": _AIS_MSG_TYPE_STANDARD_CLASS_B_POSITION_REPORT,
+    "ExtendedClassBPositionReport": _AIS_MSG_TYPE_EXTENDED_CLASS_B_POSITION_REPORT,
+}
+
+
 def _extract_aisstream(raw: dict) -> _ExtractedFields:
     """See https://github.com/aisstream/ais-message-models for the wire
-    schema. Only PositionReport and ShipStaticData are handled -- the
-    only two message types this adapter subscribes to.
+    schema.
     """
     message_type = raw["MessageType"]
 
@@ -134,9 +157,9 @@ def _extract_aisstream(raw: dict) -> _ExtractedFields:
     body = raw["Message"][message_type]
     mmsi = str(body["UserID"]).strip().zfill(9)
 
-    if message_type == "PositionReport":
+    if message_type in _POSITION_MESSAGE_TYPES:
         if body.get("Valid") is False:
-            raise ValueError("AISStream flagged this position report as invalid")
+            raise ValueError(f"AISStream flagged this {message_type} as invalid")
 
         sog = body.get("Sog")
         # 102.3 is the AIS "speed not available" sentinel.
@@ -150,15 +173,23 @@ def _extract_aisstream(raw: dict) -> _ExtractedFields:
 
         return _ExtractedFields(
             mmsi=mmsi,
-            message_type=_AIS_MSG_TYPE_POSITION_REPORT_CLASS_A,
+            message_type=_POSITION_MESSAGE_TYPES[message_type],
             lon=float(body["Longitude"]),
             lat=float(body["Latitude"]),
             sog=sog,
             cog=cog,
             heading=body.get("TrueHeading"),
             nav_status_code=body.get("NavigationalStatus"),
-            # AIS's PositionReport.Timestamp is only the UTC *second* the
-            # report was generated (0-59), not a usable full timestamp --
+            # Extended Class B (19) carries identity inline, unlike
+            # Class A which splits it into a separate ShipStaticData
+            # message.
+            name=(
+                _clean_text(body.get("Name"))
+                if message_type == "ExtendedClassBPositionReport"
+                else None
+            ),
+            # AIS's *.Timestamp is only the UTC *second* the report was
+            # generated (0-59), not a usable full timestamp --
             # reconstructing one from that alone would be inventing data
             # the provider doesn't actually give us. received_at is used
             # as the effective time instead (PRD SS9.2: "fall back to
@@ -177,6 +208,26 @@ def _extract_aisstream(raw: dict) -> _ExtractedFields:
             mmsi=mmsi,
             message_type=_AIS_MSG_TYPE_STATIC_AND_VOYAGE_DATA,
             name=_clean_text(body.get("Name")),
+        )
+
+    if message_type == "StaticDataReport":
+        # Class B's equivalent of ShipStaticData, split across two
+        # messages sharing the same MMSI: Part A (PartNumber False) has
+        # the name, Part B has type/callsign/dimensions. Same identity-
+        # only scope as ShipStaticData above -- only Part A's name is
+        # extracted; a Part B message legitimately carries no name, and
+        # upsert_vessel_identity already ignores a None name rather than
+        # clobbering a previously known one.
+        part_number = body.get("PartNumber")
+        name = None
+        if part_number is False:
+            name = _clean_text((body.get("ReportA") or {}).get("Name"))
+        discriminator = "static-data-report-part-b" if part_number else "static-data-report-part-a"
+        return _ExtractedFields(
+            mmsi=mmsi,
+            message_type=_AIS_MSG_TYPE_STATIC_DATA_REPORT,
+            name=name,
+            identity_discriminator=discriminator,
         )
 
     raise ValueError(f"Unsupported AISStream message type: {message_type!r}")
@@ -226,7 +277,9 @@ def parse_and_normalize(
             source.value, mmsi, observed_at or received_at, position.lon, position.lat
         )
     else:
-        dedupe_key = compute_identity_dedupe_key(source.value, mmsi, received_at)
+        dedupe_key = compute_identity_dedupe_key(
+            source.value, mmsi, received_at, fields.identity_discriminator
+        )
 
     return CanonicalAisObservation(
         dedupe_key=dedupe_key,

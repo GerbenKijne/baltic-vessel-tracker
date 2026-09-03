@@ -1,0 +1,34 @@
+{
+  "MessageType": "ExtendedClassBPositionReport",
+  "MetaData": {
+    "MMSI": 265999777,
+    "ShipName": "SEA BREEZE",
+    "Latitude": 59.32,
+    "Longitude": 18.06
+  },
+  "Message": {
+    "ExtendedClassBPositionReport": {
+      "MessageID": 19,
+      "RepeatIndicator": 0,
+      "UserID": 265999777,
+      "Valid": true,
+      "Spare1": 0,
+      "Sog": 6.1,
+      "PositionAccuracy": true,
+      "Longitude": 18.06,
+      "Latitude": 59.32,
+      "Cog": 190.0,
+      "TrueHeading": 188,
+      "Timestamp": 40,
+      "Spare2": 0,
+      "Name": "SEA BREEZE",
+      "Type": 36,
+      "Dimension": { "A": 8, "B": 2, "C": 2, "D": 2 },
+      "FixType": 1,
+      "Raim": false,
+      "Dte": false,
+      "AssignedMode": false,
+      "Spare3": 0
+    }
+  }
+}
