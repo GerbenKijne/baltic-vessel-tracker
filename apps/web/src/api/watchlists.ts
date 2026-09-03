@@ -42,8 +42,11 @@ export const watchlistsApi = {
       body: JSON.stringify({ name }),
     }),
   remove: (id: string) => request<void>(`/api/v1/watchlists/${id}`, { method: "DELETE" }),
-  addVessel: (id: string, mmsi: string) =>
-    request<void>(`/api/v1/watchlists/${id}/vessels/${mmsi}`, { method: "PUT" }),
+  addVessel: (id: string, mmsi: string, note?: string) =>
+    request<void>(`/api/v1/watchlists/${id}/vessels/${mmsi}`, {
+      method: "PUT",
+      body: note ? JSON.stringify({ note }) : undefined,
+    }),
   removeVessel: (id: string, mmsi: string) =>
     request<void>(`/api/v1/watchlists/${id}/vessels/${mmsi}`, { method: "DELETE" }),
 };

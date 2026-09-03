@@ -82,6 +82,10 @@ class WatchlistDetailOut(BaseModel):
     vessels: list[WatchlistVesselOut]
 
 
+class WatchlistVesselAdd(BaseModel):
+    note: Optional[str] = Field(default=None, max_length=500)
+
+
 class TrackPointOut(BaseModel):
     lon: float
     lat: float

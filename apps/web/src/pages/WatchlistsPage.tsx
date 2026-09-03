@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { watchlistsApi, type WatchlistVessel } from "../api/watchlists";
 import { Freshness } from "../components/Freshness";
 import { TopBar } from "../components/TopBar";
+import { downloadTextFile, parseWatchlistCsv, vesselsToCsv, vesselsToGeoJson } from "../exportUtils";
 import { freshnessForTime, FRESHNESS_LABEL, type Freshness as FreshnessState } from "../freshness";
 
 function FreshnessDot({ state }: { state: FreshnessState }) {
@@ -162,6 +163,56 @@ export function WatchlistsPage() {
     },
   });
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  async function handleImportFile(file: File) {
+    if (!selectedId) return;
+    const text = await file.text();
+    const rows = parseWatchlistCsv(text);
+    if (rows.length === 0) {
+      setImportStatus("No rows with an MMSI found in that file.");
+      return;
+    }
+    setImporting(true);
+    setImportStatus(null);
+    let added = 0;
+    let failed = 0;
+    for (const row of rows) {
+      try {
+        await watchlistsApi.addVessel(selectedId, row.mmsi, row.note);
+        added++;
+      } catch {
+        failed++;
+      }
+    }
+    setImporting(false);
+    setImportStatus(
+      `Imported ${added} of ${rows.length}${failed > 0 ? ` (${failed} failed — unknown MMSI or already on the list)` : ""}.`
+    );
+    queryClient.invalidateQueries({ queryKey: ["watchlists", selectedId] });
+    queryClient.invalidateQueries({ queryKey: ["watchlists"] });
+  }
+
+  function handleExportCsv() {
+    if (!detailQuery.data) return;
+    downloadTextFile(
+      `${detailQuery.data.name.replace(/[^a-z0-9]+/gi, "-")}.csv`,
+      vesselsToCsv(detailQuery.data.vessels),
+      "text/csv"
+    );
+  }
+
+  function handleExportGeoJson() {
+    if (!detailQuery.data) return;
+    downloadTextFile(
+      `${detailQuery.data.name.replace(/[^a-z0-9]+/gi, "-")}.geojson`,
+      JSON.stringify(vesselsToGeoJson(detailQuery.data.vessels), null, 2),
+      "application/geo+json"
+    );
+  }
+
   const removeVesselMutation = useMutation({
     mutationFn: (mmsi: string) => watchlistsApi.removeVessel(selectedId!, mmsi),
     onSuccess: () => {
@@ -263,19 +314,49 @@ export function WatchlistsPage() {
               Bulk
             </div>
             <div style={{ display: "grid", gap: 5 }}>
-              <button className="btn sm" disabled title="Not implemented yet">
-                Import CSV…
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                hidden
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleImportFile(file);
+                  e.target.value = "";
+                }}
+              />
+              <button
+                className="btn sm"
+                disabled={!selectedId || importing}
+                title={selectedId ? undefined : "Select a list first"}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {importing ? "Importing…" : "Import CSV…"}
               </button>
-              <button className="btn sm" disabled title="Not implemented yet">
+              <button
+                className="btn sm"
+                disabled={!detailQuery.data}
+                title={detailQuery.data ? undefined : "Select a list first"}
+                onClick={handleExportCsv}
+              >
                 Export CSV
               </button>
-              <button className="btn sm" disabled title="Not implemented yet">
+              <button
+                className="btn sm"
+                disabled={!detailQuery.data}
+                title={detailQuery.data ? undefined : "Select a list first"}
+                onClick={handleExportGeoJson}
+              >
                 Export GeoJSON
               </button>
             </div>
+            {importStatus && (
+              <div className="watchlists-bulk-note" style={{ color: "var(--dim)" }}>
+                {importStatus}
+              </div>
+            )}
             <div className="watchlists-bulk-note">
-              CSV takes MMSI, optional IMO and note. Duplicates within a list are rejected, not
-              merged.
+              CSV takes MMSI, optional note. Duplicates within a list are rejected, not merged.
             </div>
           </div>
           <div style={{ flex: 1 }} />

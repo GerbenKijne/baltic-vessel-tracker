@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from geoalchemy2 import Geometry
@@ -18,6 +19,7 @@ from ..schemas import (
     WatchlistDetailOut,
     WatchlistOut,
     WatchlistRename,
+    WatchlistVesselAdd,
     WatchlistVesselOut,
 )
 
@@ -184,6 +186,7 @@ async def delete_watchlist(
 async def add_vessel_to_watchlist(
     watchlist_id: str,
     mmsi: str,
+    body: Optional[WatchlistVesselAdd] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:
@@ -193,8 +196,11 @@ async def add_vessel_to_watchlist(
         id=uuid.uuid4(),
         watchlist_id=watchlist.id,
         mmsi=mmsi,
+        note=body.note if body else None,
         added_at=datetime.now(timezone.utc),
     )
+    # A repeat add (e.g. re-importing a CSV) is rejected outright, not
+    # merged -- it never updates an existing membership's note.
     stmt = stmt.on_conflict_do_nothing(index_elements=["watchlist_id", "mmsi"])
     try:
         await db.execute(stmt)
