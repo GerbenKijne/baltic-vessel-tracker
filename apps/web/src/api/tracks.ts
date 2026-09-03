@@ -7,6 +7,7 @@ export interface TrackPoint {
   time_source: string;
   sog_kn: number | null;
   quality_flags: string[];
+  source: string;
 }
 
 export interface TrackSegment {
@@ -26,6 +27,9 @@ export const tracksApi = {
   get: (mmsi: string, hours = 24) => {
     const to = new Date();
     const from = new Date(to.getTime() - hours * 60 * 60 * 1000);
+    return tracksApi.getRange(mmsi, from, to);
+  },
+  getRange: (mmsi: string, from: Date, to: Date) => {
     const params = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
     return request<Track>(`/api/v1/vessels/${mmsi}/track?${params.toString()}`);
   },

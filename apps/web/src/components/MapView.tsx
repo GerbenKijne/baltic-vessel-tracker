@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { LiveVessel } from "../api/live";
 import type { Track } from "../api/tracks";
+import { styleUrlForTheme } from "../mapStyle";
 import type { Theme } from "../ThemeContext";
 import { freshnessForTime, type Freshness } from "../freshness";
 import {
@@ -24,15 +25,6 @@ const TRACK_LAYER_ID = "vessel-track-line";
 const NAMED_LABEL_MIN_ZOOM = 7;
 
 type Bounds = [[number, number], [number, number]];
-
-// Both styles are equally desaturated (same OpenFreeMap family, same
-// glyphs/font server -- confirmed before switching, see the font-404
-// lesson in project memory) so vessel marker colours stand out on either.
-function styleUrlForTheme(theme: Theme): string {
-  return theme === "light"
-    ? "https://tiles.openfreemap.org/styles/positron"
-    : "https://tiles.openfreemap.org/styles/dark";
-}
 
 function fillStyleFor(freshness: Freshness): MarkerFillStyle {
   if (freshness === "live" || freshness === "delayed") return "solid";

@@ -1151,3 +1151,81 @@ table.t .unk {
   text-align: center;
   color: var(--faint);
 }
+
+/* ---------- history screen ---------- */
+
+.history-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.history-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.history-map {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: oklch(0.155 0.016 245);
+}
+
+.history-gaps {
+  flex: none;
+  border-top: 1px solid var(--line-soft);
+  background: var(--bg1);
+  max-height: 210px;
+  overflow: auto;
+}
+
+.history-gaps-note {
+  padding: 9px 14px;
+  color: var(--faint);
+  font-size: 10.5px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.history-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--faint);
+  text-align: center;
+  padding: 2rem;
+}
+
+.history-window-range {
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.history-search-results {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.vlabel {
+  position: absolute;
+  background: oklch(0.2 0.02 245 / 0.9);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 1px 5px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  white-space: nowrap;
+  color: var(--dim);
+  pointer-events: none;
+}
+
+.vlabel-live {
+  border-color: var(--live);
+  color: var(--live);
+}

@@ -35,6 +35,14 @@ class VesselListOut(BaseModel):
     truncated: bool
 
 
+class VesselSearchResultOut(BaseModel):
+    mmsi: str
+    name: Optional[str]
+    imo: Optional[int]
+    last_observed_at: Optional[datetime]
+    last_received_at: Optional[datetime]
+
+
 class WatchlistCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
 
@@ -81,6 +89,7 @@ class TrackPointOut(BaseModel):
     time_source: str
     sog_kn: Optional[float]
     quality_flags: list[str]
+    source: str
 
 
 class TrackSegmentOut(BaseModel):

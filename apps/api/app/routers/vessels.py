@@ -4,14 +4,21 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from geoalchemy2 import Geometry
 from geoalchemy2.functions import ST_X, ST_Y, ST_MakeEnvelope, ST_Within
-from sqlalchemy import cast, select
+from sqlalchemy import cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..db import get_db
 from ..deps import get_current_user
 from ..models import PositionObservation, Vessel, VesselLatest
-from ..schemas import TrackOut, TrackPointOut, TrackSegmentOut, VesselListOut, VesselOut
+from ..schemas import (
+    TrackOut,
+    TrackPointOut,
+    TrackSegmentOut,
+    VesselListOut,
+    VesselOut,
+    VesselSearchResultOut,
+)
 
 router = APIRouter(prefix="/api/v1/vessels", tags=["vessels"])
 settings = get_settings()
@@ -80,6 +87,48 @@ async def list_vessels(
     return VesselListOut(vessels=vessels, truncated=truncated)
 
 
+@router.get(
+    "/search", response_model=list[VesselSearchResultOut], dependencies=[Depends(get_current_user)]
+)
+async def search_vessels(
+    q: str = Query(..., min_length=1, max_length=64),
+    limit: int = Query(default=20, le=50),
+    db: AsyncSession = Depends(get_db),
+) -> list[VesselSearchResultOut]:
+    """Search every vessel this instance has ever seen an identity or
+    position for -- not just the ones currently live in a viewport (that's
+    what the Map screen's search does). Backs the History screen's vessel
+    picker (PRD: history review must work for any vessel, not just
+    watchlisted ones)."""
+    term = q.strip()
+    if not term:
+        return []
+
+    conditions = [Vessel.name.ilike(f"%{term}%"), Vessel.mmsi.ilike(f"{term}%")]
+    if term.isdigit():
+        conditions.append(Vessel.imo == int(term))
+
+    query = (
+        select(Vessel, VesselLatest.observed_at, VesselLatest.received_at)
+        .outerjoin(VesselLatest, VesselLatest.mmsi == Vessel.mmsi)
+        .where(or_(*conditions))
+        .order_by(VesselLatest.received_at.desc().nulls_last())
+        .limit(limit)
+    )
+    rows = (await db.execute(query)).all()
+
+    return [
+        VesselSearchResultOut(
+            mmsi=vessel.mmsi,
+            name=vessel.name,
+            imo=vessel.imo,
+            last_observed_at=observed_at,
+            last_received_at=received_at,
+        )
+        for vessel, observed_at, received_at in rows
+    ]
+
+
 # Hard safety cap independent of the query window -- a wide time window on a
 # very active vessel must not pull an unbounded number of rows into memory
 # before decimation (PRD SS14: "No unbounded in-memory collections").
@@ -111,6 +160,7 @@ async def get_vessel_track(
             PositionObservation.received_at,
             PositionObservation.sog_kn,
             PositionObservation.quality_flags,
+            PositionObservation.source,
         )
         .where(
             PositionObservation.mmsi == mmsi,
@@ -138,7 +188,7 @@ async def get_vessel_track(
     gap_threshold = timedelta(minutes=settings.track_gap_minutes)
     segments: list[list[TrackPointOut]] = []
     previous_time: Optional[datetime] = None
-    for lon, lat, observed_at, received_at, sog_kn, quality_flags in rows:
+    for lon, lat, observed_at, received_at, sog_kn, quality_flags, source in rows:
         point_time = observed_at or received_at
         if previous_time is None or (point_time - previous_time) > gap_threshold:
             segments.append([])
@@ -151,6 +201,7 @@ async def get_vessel_track(
                 time_source="observed" if observed_at else "received",
                 sog_kn=float(sog_kn) if sog_kn is not None else None,
                 quality_flags=quality_flags,
+                source=source,
             )
         )
 
