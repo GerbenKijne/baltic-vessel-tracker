@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { LiveVessel } from "../api/live";
 import type { Track } from "../api/tracks";
+import type { Theme } from "../ThemeContext";
 import { freshnessForTime, type Freshness } from "../freshness";
 import {
   iconId,
@@ -23,6 +24,15 @@ const TRACK_LAYER_ID = "vessel-track-line";
 const NAMED_LABEL_MIN_ZOOM = 7;
 
 type Bounds = [[number, number], [number, number]];
+
+// Both styles are equally desaturated (same OpenFreeMap family, same
+// glyphs/font server -- confirmed before switching, see the font-404
+// lesson in project memory) so vessel marker colours stand out on either.
+function styleUrlForTheme(theme: Theme): string {
+  return theme === "light"
+    ? "https://tiles.openfreemap.org/styles/positron"
+    : "https://tiles.openfreemap.org/styles/dark";
+}
 
 function fillStyleFor(freshness: Freshness): MarkerFillStyle {
   if (freshness === "live" || freshness === "delayed") return "solid";
@@ -51,6 +61,7 @@ function vesselsToGeoJson(
         properties: {
           mmsi: vessel.mmsi,
           name: vessel.name ?? vessel.mmsi,
+          shape,
           heading: vessel.headingDeg ?? vessel.cogDeg ?? 0,
           icon: iconId(shape, fillStyleFor(freshness)),
           freshness,
@@ -85,6 +96,7 @@ interface Props {
   onSelectVessel: (mmsi: string | null) => void;
   track: Track | null;
   focusBounds: Bounds | null;
+  theme: Theme;
 }
 
 export function MapView({
@@ -94,10 +106,15 @@ export function MapView({
   onSelectVessel,
   track,
   focusBounds,
+  theme,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
   const onSelectVesselRef = useRef(onSelectVessel);
+  // Remembers the viewport across a theme switch, since that tears down
+  // and recreates the whole Map instance (simplest way to swap basemap
+  // style without hand-reattaching every layer/source/handler).
+  const viewStateRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -107,19 +124,17 @@ export function MapView({
   useEffect(() => {
     if (!containerRef.current) return;
 
+    const initialView = viewStateRef.current;
     let map: MaplibreMap;
     try {
       map = new maplibregl.Map({
         container: containerRef.current,
-        // Dark/greyscale basemap: matches the app's dark chrome and makes
-        // the freshness-coloured vessel markers stand out. Same glyphs/font
-        // as "liberty" (confirmed against the style JSON) so this doesn't
-        // reopen the font-404 issue from Phase 1.
-        style: "https://tiles.openfreemap.org/styles/dark",
+        style: styleUrlForTheme(theme),
         // Default viewport: Sweden + Baltic, centre ~59.2N 19.4E (design
-        // handoff). Zoom clamp 4-12 per the design's map behaviour spec.
-        center: [19.4, 59.2],
-        zoom: 6,
+        // handoff), unless a prior theme switch left a viewport to restore.
+        // Zoom clamp 4-12 per the design's map behaviour spec.
+        center: initialView?.center ?? [19.4, 59.2],
+        zoom: initialView?.zoom ?? 6,
         minZoom: 4,
         maxZoom: 12,
       });
@@ -188,7 +203,11 @@ export function MapView({
         source: SOURCE_ID,
         layout: {
           "icon-image": ["get", "icon"],
-          "icon-rotate": ["get", "heading"],
+          // Only the arrow shape encodes a heading -- squares (stopped/
+          // anchored) and circles (orientation unknown) must always render
+          // upright, never rotated to a COG/heading that isn't meaningful
+          // for them.
+          "icon-rotate": ["case", ["==", ["get", "shape"], "arrow"], ["get", "heading"], 0],
           "icon-rotation-alignment": "map",
           "icon-allow-overlap": true,
           "icon-size": ["case", ["get", "isSelected"], 0.85, 0.6],
@@ -267,11 +286,13 @@ export function MapView({
     });
 
     return () => {
+      const center = map.getCenter();
+      viewStateRef.current = { center: [center.lng, center.lat], zoom: map.getZoom() };
       map.remove();
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [theme]);
 
   useEffect(() => {
     const map = mapRef.current;

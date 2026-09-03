@@ -9,6 +9,8 @@ interface Props {
   detail: WatchlistDetail | undefined;
   onFocusVessel: (mmsi: string) => void;
   dimmed: boolean;
+  watchlistOnly: boolean;
+  onToggleWatchlistOnly: () => void;
 }
 
 const FRESHNESS_RANK = { live: 0, delayed: 1, stale: 2, dark: 3 } as const;
@@ -20,6 +22,8 @@ export function WatchlistPanel({
   detail,
   onFocusVessel,
   dimmed,
+  watchlistOnly,
+  onToggleWatchlistOnly,
 }: Props) {
   const staleCount =
     detail?.vessels.filter((v) => v.freshness === "stale" || v.freshness === "dark").length ?? 0;
@@ -61,6 +65,12 @@ export function WatchlistPanel({
         )}
         <span className="disclosure">▾</span>
       </summary>
+      {detail && (
+        <label className="map-watchlist-filter-toggle">
+          <input type="checkbox" checked={watchlistOnly} onChange={onToggleWatchlistOnly} />
+          Show only this list on map
+        </label>
+      )}
       <div className="map-watchlist-body">
         {detail?.vessels
           .slice()

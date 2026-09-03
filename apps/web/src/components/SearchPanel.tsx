@@ -4,7 +4,7 @@ import type { LiveVessel } from "../api/live";
 import type { Freshness as FreshnessState } from "../freshness";
 import { Freshness } from "./Freshness";
 
-const FRESHNESS_FILTERS: FreshnessState[] = ["live", "stale", "dark"];
+const FRESHNESS_FILTERS: FreshnessState[] = ["live", "delayed", "stale", "dark"];
 const FRESHNESS_FILTER_LABEL: Record<FreshnessState, string> = {
   live: "Live only",
   delayed: "Delayed",

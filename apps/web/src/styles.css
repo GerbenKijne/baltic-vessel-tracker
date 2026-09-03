@@ -19,6 +19,30 @@
   --focus: oklch(0.82 0.115 218);
 }
 
+/* Light theme: same neutral hue/chroma as dark, lightness inverted, and
+   the semantic accent colours darkened to keep contrast on a pale
+   background -- they're a family with the dark-theme accents (same hue),
+   not a separate palette. The MapLibre basemap switches separately (see
+   MapView.tsx) to OpenFreeMap's "positron" style, which is just as
+   desaturated as "dark" so the vessel marker colours keep standing out. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg0: oklch(0.98 0.004 245);
+  --bg1: oklch(0.955 0.006 245);
+  --bg2: oklch(0.91 0.008 245);
+  --line: oklch(0.82 0.012 245);
+  --line-soft: oklch(0.88 0.01 245);
+  --txt: oklch(0.22 0.012 245);
+  --dim: oklch(0.42 0.012 245);
+  --faint: oklch(0.56 0.011 245);
+  --live: oklch(0.55 0.13 168);
+  --delayed: oklch(0.58 0.14 78);
+  --stale: oklch(0.55 0.16 22);
+  --dark: oklch(0.5 0.018 245);
+  --sel: oklch(0.5 0.14 218);
+  --focus: oklch(0.5 0.14 218);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -793,6 +817,16 @@ table.t .unk {
 .map-watchlist-summary .name {
   font-weight: 600;
   font-size: 12.5px;
+}
+
+.map-watchlist-filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 8px;
+  font-size: 11px;
+  color: var(--faint);
+  cursor: pointer;
 }
 
 .map-watchlist-body {

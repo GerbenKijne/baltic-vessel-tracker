@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 
 import { AuthProvider } from "./AuthContext";
+import { useTheme } from "./ThemeContext";
 import { api } from "./api/client";
 import { AdminPage } from "./pages/AdminPage";
 import { AlertsPage } from "./pages/AlertsPage";
@@ -18,6 +19,7 @@ const SECTIONS = [
 ];
 
 function AppShell({ onLogout }: { onLogout: () => void }) {
+  const { theme, toggleTheme } = useTheme();
   return (
     <div className="app">
       <nav className="nav" aria-label="Sections">
@@ -42,6 +44,14 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
         >
           <span>AD</span>
         </NavLink>
+        <button
+          className="navlink"
+          title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          aria-label="Toggle theme"
+          onClick={toggleTheme}
+        >
+          <span>{theme === "dark" ? "☀" : "☾"}</span>
+        </button>
         <button className="navlink" title="Sign out" aria-label="Sign out" onClick={onLogout}>
           <span>⏻</span>
         </button>

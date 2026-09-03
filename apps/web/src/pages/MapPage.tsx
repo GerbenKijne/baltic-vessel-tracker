@@ -6,6 +6,7 @@ import { useLiveVessels, type LiveVessel } from "../api/live";
 import { sourcesApi } from "../api/sources";
 import { tracksApi } from "../api/tracks";
 import { watchlistsApi } from "../api/watchlists";
+import { useTheme } from "../ThemeContext";
 import { DegradationBanner } from "../components/DegradationBanner";
 import { LegendPanel } from "../components/LegendPanel";
 import { MapView } from "../components/MapView";
@@ -32,6 +33,7 @@ function boundsFromVessels(vessels: { lon: number | null; lat: number | null }[]
 }
 
 export function MapPage() {
+  const { theme } = useTheme();
   const [bbox, setBbox] = useState(DEFAULT_BBOX);
   const { vessels: allVessels, connected } = useLiveVessels(bbox);
   const queryClient = useQueryClient();
@@ -43,6 +45,7 @@ export function MapPage() {
   );
   const [trackMmsi, setTrackMmsi] = useState<string | null>(searchParams.get("track"));
   const [freshnessFilter, setFreshnessFilter] = useState<Set<Freshness>>(new Set());
+  const [watchlistOnly, setWatchlistOnly] = useState(false);
 
   // Deep-link params only set initial state (from the Watchlists page's
   // "View on map" / "Track" links); clear them so they don't re-fire.
@@ -102,17 +105,36 @@ export function MapPage() {
     });
   }
 
-  const vessels = useMemo((): Map<string, LiveVessel> => {
-    if (freshnessFilter.size === 0) return allVessels;
-    const filtered = new Map<string, LiveVessel>();
-    for (const [mmsi, vessel] of allVessels) {
-      const state = freshnessForTime(vessel.observedAt ?? vessel.receivedAt);
-      if (freshnessFilter.has(state)) filtered.set(mmsi, vessel);
-    }
-    return filtered;
-  }, [allVessels, freshnessFilter]);
+  function handleSelectWatchlist(id: string | null) {
+    setSelectedWatchlistId(id);
+    if (!id) setWatchlistOnly(false);
+  }
 
   const watchlistDetail = watchlistDetailQuery.data;
+
+  const vessels = useMemo((): Map<string, LiveVessel> => {
+    let result = allVessels;
+
+    if (freshnessFilter.size > 0) {
+      const filtered = new Map<string, LiveVessel>();
+      for (const [mmsi, vessel] of result) {
+        const state = freshnessForTime(vessel.observedAt ?? vessel.receivedAt);
+        if (freshnessFilter.has(state)) filtered.set(mmsi, vessel);
+      }
+      result = filtered;
+    }
+
+    if (watchlistOnly && watchlistDetail) {
+      const memberMmsis = new Set(watchlistDetail.vessels.map((v) => v.mmsi));
+      const filtered = new Map<string, LiveVessel>();
+      for (const [mmsi, vessel] of result) {
+        if (memberMmsis.has(mmsi)) filtered.set(mmsi, vessel);
+      }
+      result = filtered;
+    }
+
+    return result;
+  }, [allVessels, freshnessFilter, watchlistOnly, watchlistDetail]);
 
   // Widen the viewport to include every watchlisted vessel's last known
   // position when a list is selected, so out-of-view members actually show
@@ -133,6 +155,7 @@ export function MapPage() {
         onSelectVessel={handleSelectVessel}
         track={trackQuery.data ?? null}
         focusBounds={focusBounds}
+        theme={theme}
       />
 
       <SearchPanel
@@ -145,10 +168,12 @@ export function MapPage() {
       <WatchlistPanel
         watchlists={watchlistsQuery.data ?? []}
         selectedId={selectedWatchlistId}
-        onSelectList={setSelectedWatchlistId}
+        onSelectList={handleSelectWatchlist}
         detail={watchlistDetail}
         onFocusVessel={handleSelectVessel}
         dimmed={selectedMmsi !== null}
+        watchlistOnly={watchlistOnly}
+        onToggleWatchlistOnly={() => setWatchlistOnly((v) => !v)}
       />
 
       <SourcePanel sources={sourcesQuery.data ?? []} />
