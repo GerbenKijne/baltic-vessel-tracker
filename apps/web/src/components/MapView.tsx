@@ -127,8 +127,6 @@ export function MapView({
       setMapError(err instanceof Error ? err.message : "Failed to initialize the map");
       return;
     }
-    // Temporary debugging aid -- remove once the invisible-marker issue is found.
-    (window as unknown as { __map: MaplibreMap }).__map = map;
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 
@@ -152,7 +150,11 @@ export function MapView({
         type: "line",
         source: TRACK_SOURCE_ID,
         layout: { "line-join": "round", "line-cap": "round" },
-        paint: { "line-color": "oklch(0.82 0.115 218)", "line-width": 2, "line-opacity": 0.85 },
+        // MapLibre's bundled color parser doesn't understand CSS oklch(),
+        // so paint colors are hex/rgba equivalents of the design tokens,
+        // not the oklch() strings styles.css uses (those go through the
+        // browser's own CSS engine, which does support oklch()).
+        paint: { "line-color": "#5ed6f6", "line-width": 2, "line-opacity": 0.85 },
       });
 
       map.addSource(SELECTION_SOURCE_ID, {
@@ -168,7 +170,7 @@ export function MapView({
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
         },
-        paint: { "icon-color": "oklch(0.82 0.115 218)" },
+        paint: { "icon-color": "#5ed6f6" },
       });
 
       map.addSource(SOURCE_ID, {
@@ -196,12 +198,12 @@ export function MapView({
             "match",
             ["get", "freshness"],
             "live",
-            "oklch(0.8 0.13 168)",
+            "#58d8ae",
             "delayed",
-            "oklch(0.8 0.13 78)",
+            "#ebb353",
             "stale",
-            "oklch(0.72 0.13 22)",
-            "oklch(0.64 0.018 245)",
+            "#eb817f",
+            "#838e97",
           ],
         },
       });
@@ -222,8 +224,8 @@ export function MapView({
           "text-optional": true,
         },
         paint: {
-          "text-color": "oklch(0.955 0.005 245)",
-          "text-halo-color": "oklch(0.2 0.02 245 / .9)",
+          "text-color": "#edf0f3",
+          "text-halo-color": "rgba(14, 23, 31, 0.9)",
           "text-halo-width": 1.2,
           "text-opacity": [
             "case",
