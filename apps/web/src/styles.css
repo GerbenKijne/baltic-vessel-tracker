@@ -1260,18 +1260,42 @@ table.t .unk {
   display: contents;
 }
 
+/* Only meaningful on mobile (shown via the media query below) -- toggles
+   .map-panel-stack's "open" class. Even fully collapsed, five stacked
+   summary rows were still too much to have permanently on screen on a
+   phone, so the whole group hides behind one button instead. */
+.map-panel-toggle {
+  display: none;
+}
+
 @media (max-width: 680px) {
-  .map-panel-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+  .map-panel-toggle {
+    display: block;
     position: absolute;
     top: 8px;
     left: 8px;
+    z-index: 501;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--txt);
+  }
+
+  .map-panel-stack {
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    position: absolute;
+    top: 52px;
+    left: 8px;
     right: 8px;
     z-index: 500;
-    max-height: calc(100% - 16px);
+    max-height: calc(100% - 60px);
     overflow-y: auto;
+  }
+
+  .map-panel-stack.open {
+    display: flex;
   }
 
   .map-panel-stack > .float {

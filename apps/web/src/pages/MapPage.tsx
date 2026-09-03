@@ -40,6 +40,13 @@ export function MapPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // Mobile only (see .map-panel-toggle/.map-panel-stack in styles.css) --
+  // on desktop the panels are always visible in their own corners and
+  // this state has no effect. Starts closed since even collapsed, the
+  // five stacked panels are still too much to have permanently on
+  // screen on a phone.
+  const [panelsOpen, setPanelsOpen] = useState(false);
+
   const [selectedMmsi, setSelectedMmsi] = useState<string | null>(null);
   const [selectedWatchlistId, setSelectedWatchlistId] = useState<string | null>(
     searchParams.get("watchlist")
@@ -159,7 +166,16 @@ export function MapPage() {
         theme={theme}
       />
 
-      <div className="map-panel-stack">
+      <button
+        type="button"
+        className="float map-panel-toggle"
+        onClick={() => setPanelsOpen((v) => !v)}
+        aria-expanded={panelsOpen}
+      >
+        {panelsOpen ? "✕ Close" : "☰ Panels"}
+      </button>
+
+      <div className={`map-panel-stack${panelsOpen ? " open" : ""}`}>
         <DegradationBanner sources={sourcesQuery.data ?? []} />
 
         {!connected && (
