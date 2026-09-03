@@ -137,3 +137,74 @@ class TableStorageOut(BaseModel):
 class StorageStatsOut(BaseModel):
     database_size_bytes: int
     tables: list[TableStorageOut]
+
+
+# ---------- alerts ----------
+# Geofences are circles only (V1 scope cut -- see docs/adr or the Alerts
+# feature's own commit message): center + radius, keyboard/form
+# accessible without needing a map-drawing UI. Stored as a real PostGIS
+# polygon (ST_Buffer of the center point) so geofence_enter/exit
+# evaluation can use the same ST_Contains machinery a freeform polygon
+# would need anyway; the authoring center/radius are kept in `style` so
+# the UI can redisplay and re-edit them without reverse-engineering a
+# polygon back into a circle.
+
+ALERT_RULE_TYPES = {"geofence_enter", "geofence_exit", "stale", "speed_above"}
+ALERT_TARGET_KINDS = {"all", "vessel", "watchlist"}
+
+
+class GeofenceCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    center_lon: float = Field(ge=-180, le=180)
+    center_lat: float = Field(ge=-90, le=90)
+    radius_m: float = Field(gt=0, le=500_000)
+
+
+class GeofenceOut(BaseModel):
+    id: str
+    name: str
+    center_lon: float
+    center_lat: float
+    radius_m: float
+    enabled: bool
+
+
+class AlertRuleCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    type: str
+    target: dict
+    params: dict = Field(default_factory=dict)
+    cooldown_seconds: int = Field(default=1800, ge=60, le=86400)
+    enabled: bool = True
+
+
+class AlertRuleUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    type: Optional[str] = None
+    target: Optional[dict] = None
+    params: Optional[dict] = None
+    cooldown_seconds: Optional[int] = Field(default=None, ge=60, le=86400)
+    enabled: Optional[bool] = None
+
+
+class AlertRuleOut(BaseModel):
+    id: str
+    name: str
+    type: str
+    target: dict
+    params: dict
+    cooldown_seconds: int
+    enabled: bool
+    event_count: int
+
+
+class AlertEventOut(BaseModel):
+    id: str
+    rule_id: str
+    rule_name: str
+    rule_type: str
+    mmsi: str
+    vessel_name: Optional[str]
+    occurred_at: datetime
+    context: dict
+    acknowledged_at: Optional[datetime]

@@ -11,7 +11,7 @@ from .db import SessionLocal
 from .models import User
 from .realtime.manager import heartbeat_loop, stream_listener
 from .redis_client import get_redis
-from .routers import admin, auth, health, live, vessels, watchlists
+from .routers import admin, alerts, auth, health, live, vessels, watchlists
 from .security import hash_password, utcnow
 
 logging.basicConfig(level=logging.INFO)
@@ -74,4 +74,5 @@ app.include_router(auth.router)
 app.include_router(vessels.router)
 app.include_router(watchlists.router)
 app.include_router(admin.router)
+app.include_router(alerts.router)
 app.include_router(live.router)

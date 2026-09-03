@@ -1245,6 +1245,93 @@ table.t .unk {
   color: var(--live);
 }
 
+/* ---------- alerts ---------- */
+/* Ported from the design handoff's Alerts.html (its own inline <style>,
+   never carried into common.css/screens.css since Alerts was a
+   placeholder until now) -- verbatim, all values were already design
+   tokens. */
+
+.ev {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  gap: 3px 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+}
+
+.ev:hover {
+  background: var(--bg1);
+}
+
+.ev.on {
+  background: var(--bg2);
+  box-shadow: inset 2px 0 0 var(--sel);
+}
+
+.ev .meta {
+  grid-column: 2 / -1;
+  display: flex;
+  gap: 10px;
+  color: var(--faint);
+  font-size: 10.5px;
+  font-family: "IBM Plex Mono", monospace;
+  flex-wrap: wrap;
+}
+
+.builder {
+  width: 352px;
+  flex: none;
+  border-left: 1px solid var(--line-soft);
+  background: var(--bg1);
+  overflow: auto;
+}
+
+.fld {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.fld label {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.radio {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.radio button {
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 4px 9px;
+  font-size: 11px;
+  color: var(--dim);
+  background: none;
+}
+
+.radio button.on {
+  background: var(--bg2);
+  border-color: var(--live);
+  color: var(--txt);
+}
+
+.alerts-geofence-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alerts-geofence-row .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+  background: var(--live);
+}
+
 /* ---------- mobile ---------- */
 
 /* Groups the Map screen's independently-positioned floating panels so
@@ -1329,6 +1416,14 @@ table.t .unk {
     max-height: 45vh;
     border-right: 0;
     border-bottom: 1px solid var(--line-soft);
+  }
+
+  /* Alerts' rule builder -- same fixed-width-panel problem as .side and
+     .drawer above. */
+  .builder {
+    width: auto;
+    border-left: 0;
+    border-top: 1px solid var(--line-soft);
   }
 
   .login-form {

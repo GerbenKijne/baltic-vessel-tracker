@@ -147,6 +147,7 @@ class AlertRule(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(PGUUID, primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(PGUUID, ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
     type: Mapped[str] = mapped_column(String(30), nullable=False)
     target: Mapped[dict] = mapped_column(JSONB, nullable=False)
     params: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
@@ -164,6 +165,9 @@ class AlertEvent(Base):
     transition_key: Mapped[str] = mapped_column(String(128), nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     context: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    acknowledged_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class NotificationDelivery(Base):

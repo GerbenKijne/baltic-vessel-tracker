@@ -6,7 +6,10 @@ from datetime import datetime
 from typing import Optional
 
 from canonical import CanonicalAisObservation
+from geoalchemy2 import Geometry
 from geoalchemy2.elements import WKTElement
+from geoalchemy2.functions import ST_X, ST_Y
+from sqlalchemy import cast, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -15,6 +18,26 @@ from .tables import position_observations, raw_messages, source_status, vessel_l
 
 def _point(lon: float, lat: float) -> WKTElement:
     return WKTElement(f"POINT({lon} {lat})", srid=4326)
+
+
+async def get_previous_position(
+    conn: AsyncConnection, mmsi: str
+) -> Optional[tuple[float, float]]:
+    """The vessel's position *before* this message's upsert overwrites it
+    -- alert geofence enter/exit evaluation needs the prior point to
+    detect a transition, so this must be called before upsert_vessel_latest.
+    """
+    position_geom = cast(vessel_latest.c.position, Geometry)
+    row = (
+        await conn.execute(
+            select(ST_X(position_geom), ST_Y(position_geom)).where(
+                vessel_latest.c.mmsi == mmsi, vessel_latest.c.position.is_not(None)
+            )
+        )
+    ).first()
+    if row is None:
+        return None
+    return (row[0], row[1])
 
 
 async def upsert_vessel_identity(conn: AsyncConnection, mmsi: str, name: Optional[str]) -> None:

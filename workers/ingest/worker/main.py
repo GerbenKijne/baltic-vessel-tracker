@@ -15,10 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from .adapters.aisstream import AISStreamAdapter
 from .adapters.base import Adapter
 from .adapters.simulator import SimulatorAdapter
+from .alerts import alerts_loop, evaluate_position_alerts
 from .config import WorkerConfig, load_config
 from .dedupe import is_duplicate
 from .normalize import IgnorableMessage, parse_and_normalize
 from .persistence import (
+    get_previous_position,
     insert_position_observation,
     record_raw_message,
     record_source_heartbeat,
@@ -88,8 +90,26 @@ async def _ingest_loop(
                 # carry no position -- upsert_vessel_latest would otherwise
                 # null out a vessel's last known position/kinematics.
                 if obs.position is not None:
+                    # Must run before the upsert overwrites it -- this is
+                    # the "old" point geofence enter/exit needs to detect
+                    # a transition against.
+                    previous_position = await get_previous_position(conn, obs.mmsi)
                     await upsert_vessel_latest(conn, obs)
                     inserted = await insert_position_observation(conn, obs)
+                    if inserted:
+                        # Alerts only evaluate accepted state (PRD/design
+                        # principle: a duplicate or rejected observation
+                        # never fires a rule) -- gated on the same
+                        # `inserted` flag as publishing the live update.
+                        await evaluate_position_alerts(
+                            conn,
+                            obs.mmsi,
+                            obs.position.lon,
+                            obs.position.lat,
+                            obs.sog_kn,
+                            obs.received_at,
+                            previous_position,
+                        )
 
             if inserted:
                 await publish_vessel_upsert(redis, obs)
@@ -115,11 +135,12 @@ async def run() -> None:
     engine = create_async_engine(config.database_url, pool_pre_ping=True)
     redis = from_url(config.redis_url)
 
-    # Runs alongside the ingest loop for the lifetime of the process --
+    # Run alongside the ingest loop for the lifetime of the process --
     # one already-continuous worker, no separate cron/service needed.
     await asyncio.gather(
         _ingest_loop(config, adapter, engine, redis),
         retention_loop(engine, config),
+        alerts_loop(engine),
     )
 
 
