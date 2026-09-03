@@ -169,13 +169,12 @@ export function MapView({
       map = new maplibregl.Map({
         container: containerRef.current,
         style: styleUrlForTheme(theme),
-        // Default viewport: centred on the tracked region (Stockholm,
-        // Gotland, Åland, southern Finnish coast -- see
+        // Default viewport: centred on the whole Baltic Sea (see
         // worker/config.py's DEFAULT_BOUNDING_BOXES), unless a prior
         // theme switch left a viewport to restore. Zoom clamp 4-12 per
         // the design's map behaviour spec.
-        center: initialView?.center ?? [21.0, 58.9],
-        zoom: initialView?.zoom ?? 5.5,
+        center: initialView?.center ?? [19.75, 59.7],
+        zoom: initialView?.zoom ?? 4.7,
         minZoom: 4,
         maxZoom: 12,
       });

@@ -17,7 +17,8 @@ import { WatchlistPanel } from "../components/WatchlistPanel";
 import type { Freshness } from "../freshness";
 import { freshnessForTime } from "../freshness";
 
-const DEFAULT_BBOX = { min_lon: 10, min_lat: 54, max_lon: 25, max_lat: 66 };
+// Matches worker/config.py's DEFAULT_BOUNDING_BOXES: the whole Baltic Sea.
+const DEFAULT_BBOX = { min_lon: 9, min_lat: 53.5, max_lon: 30.5, max_lat: 65.9 };
 
 function boundsFromVessels(vessels: { lon: number | null; lat: number | null }[]) {
   const points = vessels.filter(

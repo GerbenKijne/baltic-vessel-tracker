@@ -3,19 +3,29 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional
 
-# Originally three small starting boxes for the PRD SS12.1 mandatory
-# capture spike (Stockholm, Gothenburg, Öresund/Copenhagen) -- that spike
-# is done (docs/data-source-register.md) and those results stay valid as
-# a historical record even though the boxes below have since changed.
-# Replaced 2026-09-03 with a single wider box per the user's own choice:
-# drop Gothenburg/Öresund, focus on the Stockholm area but expand it to
-# also cover Gotland, Åland, and the southern Finnish coast (Turku/
-# Helsinki). [[lat, lon], [lat, lon]] (SW corner, NE corner), matching
-# AISStream's documented BoundingBoxes order (confirmed against
+# History: originally three small boxes for the PRD SS12.1 mandatory
+# capture spike (Stockholm, Gothenburg, Öresund/Copenhagen); then, on
+# 2026-09-03, one wider box (Stockholm, Gotland, Åland, southern Finnish
+# coast). Both are historical record now (docs/data-source-register.md),
+# not the live config.
+#
+# Replaced again 2026-09-03 (same day, user's explicit choice) with the
+# entire Baltic Sea: south to the German/Polish/Danish coast and the
+# straits into the Kattegat, north through the whole Gulf of Bothnia,
+# east through the Gulf of Finland to St. Petersburg and the Gulf of
+# Riga/Baltic states. [[lat, lon], [lat, lon]] (SW corner, NE corner),
+# matching AISStream's documented BoundingBoxes order (confirmed against
 # https://github.com/aisstream/example's python sample, since the
 # corners' magnitudes only make sense as lat/lon, not lon/lat).
+#
+# Expect substantially more traffic than any prior box -- the Baltic is
+# one of the busiest sea regions in the world (HELCOM puts typical
+# simultaneous traffic in the low thousands of vessels). The retention
+# sweep (worker/retention.py) keeps position_observations bounded
+# regardless, but message/row volume and AISStream bandwidth will be
+# much higher than the smaller regional boxes this replaces.
 DEFAULT_BOUNDING_BOXES: list[list[list[float]]] = [
-    [[56.7, 17.3], [60.7, 25.2]],  # Stockholm, Gotland, Åland, southern Finnish coast
+    [[53.5, 9.0], [65.9, 30.5]],  # entire Baltic Sea
 ]
 
 
