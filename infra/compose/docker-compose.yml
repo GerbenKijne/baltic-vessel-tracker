@@ -89,6 +89,14 @@ services:
       context: ../..
       dockerfile: workers/ingest/Dockerfile
     restart: unless-stopped
+    # Pinned so source_status.instance (default: $HOSTNAME) stays stable
+    # across rebuilds/recreates -- otherwise Docker assigns a new random
+    # hostname to every recreated container, and each one permanently
+    # orphans its old source_status row instead of updating it (they never
+    # get another heartbeat, so they sit "degraded" forever). Single
+    # instance today; if this ever scales to multiple ingest workers, give
+    # each replica its own explicit hostname instead of removing this.
+    hostname: worker-ingest
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-baltic}:${POSTGRES_PASSWORD:-baltic}@postgres:5432/${POSTGRES_DB:-baltic}
       REDIS_URL: redis://redis:6379/0

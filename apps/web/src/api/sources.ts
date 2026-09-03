@@ -13,4 +13,8 @@ export interface SourceStatus {
 
 export const sourcesApi = {
   list: () => request<SourceStatus[]>("/api/v1/admin/sources"),
+  remove: (source: string, instance: string) =>
+    request<void>(`/api/v1/admin/sources/${encodeURIComponent(source)}/${encodeURIComponent(instance)}`, {
+      method: "DELETE",
+    }),
 };
