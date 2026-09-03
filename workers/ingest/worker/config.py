@@ -30,6 +30,14 @@ class WorkerConfig:
     aisstream_bounding_boxes: list[list[list[float]]] = field(
         default_factory=lambda: DEFAULT_BOUNDING_BOXES
     )
+    # Retention (user policy, 2026-09-03): a vessel nobody's watching only
+    # needs a day of history; a watchlisted one keeps a full year, since
+    # that's specifically what someone is tracking over time. Without
+    # this, position_observations grows unbounded once real AIS traffic
+    # is flowing continuously.
+    retention_default_hours: int = 24
+    retention_watchlisted_days: int = 365
+    retention_sweep_interval_seconds: int = 3600
 
 
 def load_config() -> WorkerConfig:
@@ -48,4 +56,9 @@ def load_config() -> WorkerConfig:
         heartbeat_interval_seconds=int(os.environ.get("SOURCE_HEARTBEAT_SECONDS", "15")),
         aisstream_api_key=os.environ.get("AISSTREAM_API_KEY") or None,
         aisstream_bounding_boxes=bounding_boxes,
+        retention_default_hours=int(os.environ.get("RETENTION_DEFAULT_HOURS", "24")),
+        retention_watchlisted_days=int(os.environ.get("RETENTION_WATCHLISTED_DAYS", "365")),
+        retention_sweep_interval_seconds=int(
+            os.environ.get("RETENTION_SWEEP_INTERVAL_SECONDS", "3600")
+        ),
     )

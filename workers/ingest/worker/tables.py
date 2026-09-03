@@ -78,6 +78,17 @@ raw_messages = Table(
     Column("parse_error", Text, nullable=True),
 )
 
+# Only the column the retention sweep actually needs (mmsi, to know which
+# vessels are watchlisted) -- deliberately not the full watchlist_vessels
+# schema (no FK to a `watchlists` table this metadata doesn't define; the
+# worker never writes to this table, only reads from it).
+watchlist_vessels = Table(
+    "watchlist_vessels",
+    metadata,
+    Column("id", UUID, primary_key=True),
+    Column("mmsi", String(9), nullable=False),
+)
+
 source_status = Table(
     "source_status",
     metadata,

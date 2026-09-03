@@ -9,8 +9,8 @@ import logging
 from datetime import datetime, timezone
 
 from canonical import Source
-from redis.asyncio import from_url
-from sqlalchemy.ext.asyncio import create_async_engine
+from redis.asyncio import Redis, from_url
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from .adapters.aisstream import AISStreamAdapter
 from .adapters.base import Adapter
@@ -26,6 +26,7 @@ from .persistence import (
     upsert_vessel_latest,
 )
 from .publish import publish_vessel_upsert
+from .retention import retention_loop
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -52,14 +53,10 @@ def build_adapter(config: WorkerConfig) -> Adapter:
     )
 
 
-async def run() -> None:
-    config = load_config()
-    adapter = build_adapter(config)
+async def _ingest_loop(
+    config: WorkerConfig, adapter: Adapter, engine: AsyncEngine, redis: Redis
+) -> None:
     source = Source(adapter.source)
-
-    engine = create_async_engine(config.database_url, pool_pre_ping=True)
-    redis = from_url(config.redis_url)
-
     message_count = 0
     error_count = 0
     last_heartbeat = datetime.now(timezone.utc)
@@ -110,6 +107,20 @@ async def run() -> None:
                     error_count,
                 )
             last_heartbeat = now
+
+
+async def run() -> None:
+    config = load_config()
+    adapter = build_adapter(config)
+    engine = create_async_engine(config.database_url, pool_pre_ping=True)
+    redis = from_url(config.redis_url)
+
+    # Runs alongside the ingest loop for the lifetime of the process --
+    # one already-continuous worker, no separate cron/service needed.
+    await asyncio.gather(
+        _ingest_loop(config, adapter, engine, redis),
+        retention_loop(engine, config),
+    )
 
 
 if __name__ == "__main__":

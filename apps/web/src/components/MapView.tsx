@@ -25,6 +25,8 @@ const CLUSTER_LAYER_ID = "vessel-clusters";
 const CLUSTER_COUNT_LAYER_ID = "vessel-cluster-count";
 const TRACK_SOURCE_ID = "vessel-track";
 const TRACK_LAYER_ID = "vessel-track-line";
+const TRACK_GAP_SOURCE_ID = "vessel-track-gap";
+const TRACK_GAP_LAYER_ID = "vessel-track-gap-line";
 const NAMED_LABEL_MIN_ZOOM = 7;
 // Design handoff: "clustering below zoom 7" -- native MapLibre GeoJSON
 // clustering handles the aggregation; individual markers take over again
@@ -98,6 +100,32 @@ function trackToGeoJson(track: Track | null): GeoJSON.FeatureCollection {
         properties: {},
       })),
   };
+}
+
+// A dashed straight line between consecutive segments' endpoints --
+// deliberately not a real path, just a visual "something is missing
+// here" marker so a gap never reads as an ordinary quiet stretch of
+// travel (PRD FR-008 "preserve gaps").
+function trackGapsToGeoJson(track: Track | null): GeoJSON.FeatureCollection {
+  if (!track) return { type: "FeatureCollection", features: [] };
+  const features: GeoJSON.Feature[] = [];
+  for (let i = 0; i < track.segments.length - 1; i++) {
+    const a = track.segments[i].points.at(-1);
+    const b = track.segments[i + 1].points[0];
+    if (!a || !b) continue;
+    features.push({
+      type: "Feature",
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [a.lon, a.lat],
+          [b.lon, b.lat],
+        ],
+      },
+      properties: {},
+    });
+  }
+  return { type: "FeatureCollection", features };
 }
 
 interface Props {
@@ -183,6 +211,23 @@ export function MapView({
         // not the oklch() strings styles.css uses (those go through the
         // browser's own CSS engine, which does support oklch()).
         paint: { "line-color": "#5ed6f6", "line-width": 2, "line-opacity": 0.85 },
+      });
+
+      map.addSource(TRACK_GAP_SOURCE_ID, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer({
+        id: TRACK_GAP_LAYER_ID,
+        type: "line",
+        source: TRACK_GAP_SOURCE_ID,
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+          "line-color": "#eb817f",
+          "line-width": 1.6,
+          "line-opacity": 0.9,
+          "line-dasharray": [2, 2],
+        },
       });
 
       map.addSource(SELECTION_SOURCE_ID, {
@@ -406,6 +451,8 @@ export function MapView({
     const map = mapRef.current;
     const source = map?.getSource(TRACK_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
     source?.setData(trackToGeoJson(track));
+    const gapSource = map?.getSource(TRACK_GAP_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+    gapSource?.setData(trackGapsToGeoJson(track));
   }, [track]);
 
   useEffect(() => {
