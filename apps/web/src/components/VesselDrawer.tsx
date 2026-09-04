@@ -25,7 +25,7 @@ const NEW_LIST_VALUE = "__new__";
 interface Props {
   vessel: LiveVessel;
   onClose: () => void;
-  onShowTrack: (mmsi: string) => void;
+  onShowHistory: (mmsi: string) => void;
   watchlists: Watchlist[];
   onAddToWatchlist: (mmsi: string, watchlistId: string) => Promise<void>;
   onCreateWatchlistAndAdd: (mmsi: string, name: string) => Promise<void>;
@@ -34,7 +34,7 @@ interface Props {
 export function VesselDrawer({
   vessel,
   onClose,
-  onShowTrack,
+  onShowHistory,
   watchlists,
   onAddToWatchlist,
   onCreateWatchlistAndAdd,
@@ -90,7 +90,7 @@ export function VesselDrawer({
           <button className="btn pri sm" style={{ flex: 1 }} onClick={() => setAddOpen((v) => !v)}>
             ★ Add to watchlist
           </button>
-          <button className="btn sm" onClick={() => onShowTrack(vessel.mmsi)}>
+          <button className="btn sm" onClick={() => onShowHistory(vessel.mmsi)}>
             History
           </button>
           <button className="btn sm" disabled title="Alerts aren't built yet">

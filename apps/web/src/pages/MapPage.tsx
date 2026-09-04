@@ -1,10 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { useLiveVessels, type LiveVessel } from "../api/live";
 import { sourcesApi } from "../api/sources";
-import { tracksApi } from "../api/tracks";
 import { watchlistsApi } from "../api/watchlists";
 import { useTheme } from "../ThemeContext";
 import { DegradationBanner } from "../components/DegradationBanner";
@@ -38,6 +37,7 @@ export function MapPage() {
   const [bbox, setBbox] = useState(DEFAULT_BBOX);
   const { vessels: allVessels, connected } = useLiveVessels(bbox);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Mobile only (see .map-panel-toggle/.map-panel-stack in styles.css) --
@@ -51,14 +51,13 @@ export function MapPage() {
   const [selectedWatchlistId, setSelectedWatchlistId] = useState<string | null>(
     searchParams.get("watchlist")
   );
-  const [trackMmsi, setTrackMmsi] = useState<string | null>(searchParams.get("track"));
   const [freshnessFilter, setFreshnessFilter] = useState<Set<Freshness>>(new Set());
   const [watchlistOnly, setWatchlistOnly] = useState(false);
 
-  // Deep-link params only set initial state (from the Watchlists page's
-  // "View on map" / "Track" links); clear them so they don't re-fire.
+  // Deep-link param only sets initial state (from the Watchlists page's
+  // "View on map" link); clear it so it doesn't re-fire.
   useEffect(() => {
-    if (searchParams.has("watchlist") || searchParams.has("track")) {
+    if (searchParams.has("watchlist")) {
       setSearchParams({}, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -69,11 +68,6 @@ export function MapPage() {
     queryKey: ["watchlists", selectedWatchlistId],
     queryFn: () => watchlistsApi.get(selectedWatchlistId!),
     enabled: selectedWatchlistId !== null,
-  });
-  const trackQuery = useQuery({
-    queryKey: ["track", trackMmsi],
-    queryFn: () => tracksApi.get(trackMmsi!),
-    enabled: trackMmsi !== null,
   });
   const sourcesQuery = useQuery({
     queryKey: ["sources"],
@@ -161,7 +155,6 @@ export function MapPage() {
         onMoveEnd={setBbox}
         selectedMmsi={selectedMmsi}
         onSelectVessel={handleSelectVessel}
-        track={trackQuery.data ?? null}
         focusBounds={focusBounds}
         theme={theme}
       />
@@ -214,7 +207,7 @@ export function MapPage() {
         <VesselDrawer
           vessel={selectedVessel}
           onClose={() => setSelectedMmsi(null)}
-          onShowTrack={setTrackMmsi}
+          onShowHistory={(mmsi) => navigate(`/history?mmsi=${mmsi}`)}
           watchlists={watchlistsQuery.data ?? []}
           onAddToWatchlist={handleAddToWatchlist}
           onCreateWatchlistAndAdd={handleCreateWatchlistAndAdd}

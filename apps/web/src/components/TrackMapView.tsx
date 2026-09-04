@@ -12,9 +12,19 @@ const GAP_SOURCE_ID = "history-gap";
 const GAP_LAYER_ID = "history-gap-line";
 const POINTS_SOURCE_ID = "history-points";
 const POINTS_LAYER_ID = "history-points-circle";
-const MAX_HOVER_POINTS = 150;
+const MAX_HOVER_POINTS_PER_VESSEL = 150;
+
+export interface VesselTrackEntry {
+  mmsi: string;
+  name: string | null;
+  color: string;
+  track: Track | null;
+}
 
 export interface HoverPointInfo {
+  mmsi: string;
+  name: string | null;
+  color: string;
   time: string;
   lon: number;
   lat: number;
@@ -23,7 +33,7 @@ export interface HoverPointInfo {
 }
 
 interface Props {
-  track: Track | null;
+  entries: VesselTrackEntry[];
   theme: Theme;
   onHoverPoint: (info: HoverPointInfo | null) => void;
 }
@@ -32,65 +42,90 @@ function emptyFC(): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features: [] };
 }
 
+function vesselLabel(entry: VesselTrackEntry): string {
+  return entry.name ?? entry.mmsi;
+}
+
 // One LineString per segment -- gaps (space between segments) are never
 // bridged by this layer; see gapLinesFor for the separate, visually
-// distinct indicator of what's between them.
-function runLinesFor(track: Track): GeoJSON.FeatureCollection {
-  return {
-    type: "FeatureCollection",
-    features: track.segments
-      .filter((s) => s.points.length > 1)
-      .map((s) => ({
+// distinct indicator of what's between them. Every vessel's lines share
+// one source/layer, colour-coded via a per-feature "color" property, so
+// adding/removing a vessel from the selection never needs its own
+// addLayer/removeLayer call.
+function runLinesFor(entries: VesselTrackEntry[]): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  for (const entry of entries) {
+    if (!entry.track) continue;
+    for (const segment of entry.track.segments) {
+      if (segment.points.length < 2) continue;
+      features.push({
         type: "Feature",
-        geometry: { type: "LineString", coordinates: s.points.map((p) => [p.lon, p.lat]) },
-        properties: {},
-      })),
-  };
+        geometry: { type: "LineString", coordinates: segment.points.map((p) => [p.lon, p.lat]) },
+        properties: { mmsi: entry.mmsi, color: entry.color },
+      });
+    }
+  }
+  return { type: "FeatureCollection", features };
 }
 
 // A dashed straight line between consecutive segments' endpoints --
 // deliberately not a real path, just a visual "something is missing here"
 // marker so a gap never reads as an ordinary quiet stretch of travel.
-function gapLinesFor(track: Track): GeoJSON.FeatureCollection {
+function gapLinesFor(entries: VesselTrackEntry[]): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
-  for (let i = 0; i < track.segments.length - 1; i++) {
-    const a = track.segments[i].points.at(-1);
-    const b = track.segments[i + 1].points[0];
-    if (!a || !b) continue;
-    features.push({
-      type: "Feature",
-      geometry: {
-        type: "LineString",
-        coordinates: [
-          [a.lon, a.lat],
-          [b.lon, b.lat],
-        ],
-      },
-      properties: {},
+  for (const entry of entries) {
+    if (!entry.track) continue;
+    const segments = entry.track.segments;
+    for (let i = 0; i < segments.length - 1; i++) {
+      const a = segments[i].points.at(-1);
+      const b = segments[i + 1].points[0];
+      if (!a || !b) continue;
+      features.push({
+        type: "Feature",
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [a.lon, a.lat],
+            [b.lon, b.lat],
+          ],
+        },
+        properties: { mmsi: entry.mmsi, color: entry.color },
+      });
+    }
+  }
+  return { type: "FeatureCollection", features };
+}
+
+// Full-resolution points feed the line; only a decimated subset per
+// vessel gets its own hoverable circle, to keep the layer light on a long
+// track.
+function hoverPointsFor(entries: VesselTrackEntry[]): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  for (const entry of entries) {
+    if (!entry.track) continue;
+    const all = entry.track.segments.flatMap((s) => s.points);
+    const step = Math.max(1, Math.floor(all.length / MAX_HOVER_POINTS_PER_VESSEL));
+    all.forEach((p, i) => {
+      if (i % step !== 0 && i !== all.length - 1) return;
+      features.push({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [p.lon, p.lat] },
+        properties: {
+          mmsi: entry.mmsi,
+          name: entry.name,
+          color: entry.color,
+          time: p.time,
+          sogKn: p.sog_kn,
+          source: p.source,
+        },
+      });
     });
   }
   return { type: "FeatureCollection", features };
 }
 
-// Full-resolution points feed the line; only a decimated subset gets its
-// own hoverable circle, to keep the layer light on a long track.
-function hoverPointsFor(track: Track): GeoJSON.FeatureCollection {
-  const all = track.segments.flatMap((s) => s.points);
-  const step = Math.max(1, Math.floor(all.length / MAX_HOVER_POINTS));
-  const features: GeoJSON.Feature[] = [];
-  all.forEach((p, i) => {
-    if (i % step !== 0 && i !== all.length - 1) return;
-    features.push({
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [p.lon, p.lat] },
-      properties: { time: p.time, sogKn: p.sog_kn, source: p.source },
-    });
-  });
-  return { type: "FeatureCollection", features };
-}
-
-function boundsFor(track: Track): [[number, number], [number, number]] | null {
-  const all = track.segments.flatMap((s) => s.points);
+function boundsFor(entries: VesselTrackEntry[]): [[number, number], [number, number]] | null {
+  const all = entries.flatMap((e) => e.track?.segments.flatMap((s) => s.points) ?? []);
   if (all.length === 0) return null;
   const lons = all.map((p) => p.lon);
   const lats = all.map((p) => p.lat);
@@ -100,17 +135,17 @@ function boundsFor(track: Track): [[number, number], [number, number]] | null {
   ];
 }
 
-export function TrackMapView({ track, theme, onHoverPoint }: Props) {
+export function TrackMapView({ entries, theme, onHoverPoint }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
-  const trackRef = useRef(track);
+  const entriesRef = useRef(entries);
   const onHoverPointRef = useRef(onHoverPoint);
   const [mapError, setMapError] = useState<string | null>(null);
 
   useEffect(() => {
-    trackRef.current = track;
-  }, [track]);
+    entriesRef.current = entries;
+  }, [entries]);
   useEffect(() => {
     onHoverPointRef.current = onHoverPoint;
   }, [onHoverPoint]);
@@ -143,7 +178,7 @@ export function TrackMapView({ track, theme, onHoverPoint }: Props) {
         type: "line",
         source: RUN_SOURCE_ID,
         layout: { "line-join": "round", "line-cap": "round" },
-        paint: { "line-color": "#5ed6f6", "line-width": 2.4, "line-opacity": 0.95 },
+        paint: { "line-color": ["get", "color"], "line-width": 2.4, "line-opacity": 0.95 },
       });
 
       map.addSource(GAP_SOURCE_ID, { type: "geojson", data: emptyFC() });
@@ -153,7 +188,7 @@ export function TrackMapView({ track, theme, onHoverPoint }: Props) {
         source: GAP_SOURCE_ID,
         layout: { "line-join": "round", "line-cap": "round" },
         paint: {
-          "line-color": "#eb817f",
+          "line-color": ["get", "color"],
           "line-width": 1.6,
           "line-opacity": 0.9,
           "line-dasharray": [2, 2],
@@ -168,7 +203,7 @@ export function TrackMapView({ track, theme, onHoverPoint }: Props) {
         paint: {
           "circle-radius": 3,
           "circle-color": "#0e171f",
-          "circle-stroke-color": "#5ed6f6",
+          "circle-stroke-color": ["get", "color"],
           "circle-stroke-width": 1.2,
         },
       });
@@ -177,9 +212,19 @@ export function TrackMapView({ track, theme, onHoverPoint }: Props) {
         map.getCanvas().style.cursor = "pointer";
         const feature = e.features?.[0];
         if (!feature || feature.geometry.type !== "Point") return;
-        const props = feature.properties as { time: string; sogKn: number | null; source: string };
+        const props = feature.properties as {
+          mmsi: string;
+          name: string | null;
+          color: string;
+          time: string;
+          sogKn: number | null;
+          source: string;
+        };
         const [lon, lat] = feature.geometry.coordinates;
         onHoverPointRef.current({
+          mmsi: props.mmsi,
+          name: props.name,
+          color: props.color,
           time: props.time,
           lon,
           lat,
@@ -194,8 +239,8 @@ export function TrackMapView({ track, theme, onHoverPoint }: Props) {
 
       // Recreating the map on a theme switch (see the effect's dep array
       // below) means data set before "load" fired is lost -- replay it
-      // immediately from the ref so a theme toggle doesn't blank the track.
-      applyTrack(map, trackRef.current, markersRef);
+      // immediately from the ref so a theme toggle doesn't blank the tracks.
+      applyTracks(map, entriesRef.current, markersRef);
     });
 
     return () => {
@@ -210,11 +255,11 @@ export function TrackMapView({ track, theme, onHoverPoint }: Props) {
     const map = mapRef.current;
     if (!map) return;
     if (map.isStyleLoaded()) {
-      applyTrack(map, track, markersRef);
+      applyTracks(map, entries, markersRef);
     } else {
-      map.once("load", () => applyTrack(map, track, markersRef));
+      map.once("load", () => applyTracks(map, entries, markersRef));
     }
-  }, [track]);
+  }, [entries]);
 
   if (mapError) {
     return (
@@ -228,7 +273,11 @@ export function TrackMapView({ track, theme, onHoverPoint }: Props) {
   return <div ref={containerRef} className="history-map" />;
 }
 
-function applyTrack(map: MaplibreMap, track: Track | null, markersRef: React.MutableRefObject<Marker[]>) {
+function applyTracks(
+  map: MaplibreMap,
+  entries: VesselTrackEntry[],
+  markersRef: React.MutableRefObject<Marker[]>
+) {
   const runSource = map.getSource(RUN_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
   const gapSource = map.getSource(GAP_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
   const pointsSource = map.getSource(POINTS_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
@@ -237,39 +286,46 @@ function applyTrack(map: MaplibreMap, track: Track | null, markersRef: React.Mut
   markersRef.current.forEach((m) => m.remove());
   markersRef.current = [];
 
-  if (!track) {
+  const withData = entries.filter((e) => e.track);
+  if (withData.length === 0) {
     runSource.setData(emptyFC());
     gapSource.setData(emptyFC());
     pointsSource.setData(emptyFC());
     return;
   }
 
-  runSource.setData(runLinesFor(track));
-  gapSource.setData(gapLinesFor(track));
-  pointsSource.setData(hoverPointsFor(track));
+  runSource.setData(runLinesFor(entries));
+  gapSource.setData(gapLinesFor(entries));
+  pointsSource.setData(hoverPointsFor(entries));
 
-  const allPoints = track.segments.flatMap((s) => s.points);
-  if (allPoints.length > 0) {
+  const newMarkers: Marker[] = [];
+  for (const entry of withData) {
+    const allPoints = entry.track!.segments.flatMap((s) => s.points);
+    if (allPoints.length === 0) continue;
     const first = allPoints[0];
     const last = allPoints[allPoints.length - 1];
+    const label = vesselLabel(entry);
 
     const startEl = document.createElement("div");
     startEl.className = "vlabel";
-    startEl.textContent = `start · ${new Date(first.time).toLocaleString()}`;
-    const startMarker = new maplibregl.Marker({ element: startEl, anchor: "left" })
-      .setLngLat([first.lon, first.lat])
-      .addTo(map);
+    startEl.style.borderColor = entry.color;
+    startEl.style.color = entry.color;
+    startEl.textContent = `${label} start · ${new Date(first.time).toLocaleString()}`;
+    newMarkers.push(
+      new maplibregl.Marker({ element: startEl, anchor: "left" }).setLngLat([first.lon, first.lat]).addTo(map)
+    );
 
     const endEl = document.createElement("div");
     endEl.className = "vlabel vlabel-live";
-    endEl.textContent = `latest · ${new Date(last.time).toLocaleString()}`;
-    const endMarker = new maplibregl.Marker({ element: endEl, anchor: "left" })
-      .setLngLat([last.lon, last.lat])
-      .addTo(map);
-
-    markersRef.current = [startMarker, endMarker];
+    endEl.style.borderColor = entry.color;
+    endEl.style.color = entry.color;
+    endEl.textContent = `${label} latest · ${new Date(last.time).toLocaleString()}`;
+    newMarkers.push(
+      new maplibregl.Marker({ element: endEl, anchor: "left" }).setLngLat([last.lon, last.lat]).addTo(map)
+    );
   }
+  markersRef.current = newMarkers;
 
-  const bounds = boundsFor(track);
+  const bounds = boundsFor(entries);
   if (bounds) map.fitBounds(bounds, { padding: 60, maxZoom: 13 });
 }

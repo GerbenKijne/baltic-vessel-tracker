@@ -459,6 +459,9 @@ export function WatchlistsPage() {
                   <button className="btn sm" onClick={() => navigate(`/map?watchlist=${detail.id}`)}>
                     View on map
                   </button>
+                  <button className="btn sm" onClick={() => navigate(`/history?watchlist=${detail.id}`)}>
+                    View history
+                  </button>
                 </>
               )}
             </div>
