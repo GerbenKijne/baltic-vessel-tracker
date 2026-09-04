@@ -56,7 +56,8 @@ function shapeFor(vessel: LiveVessel): MarkerShape {
 
 function vesselsToGeoJson(
   vessels: Map<string, LiveVessel>,
-  selectedMmsi: string | null
+  selectedMmsi: string | null,
+  highlightMmsis: Set<string> | null
 ): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
@@ -74,19 +75,33 @@ function vesselsToGeoJson(
           icon: iconId(shape, fillStyleFor(freshness)),
           freshness,
           isSelected: vessel.mmsi === selectedMmsi,
+          isDimmed: highlightMmsis != null && !highlightMmsis.has(vessel.mmsi),
         },
       };
     }),
   };
 }
 
+export interface MapMoveEnd {
+  bbox: { min_lon: number; min_lat: number; max_lon: number; max_lat: number };
+  center: [number, number];
+  zoom: number;
+}
+
 interface Props {
   vessels: Map<string, LiveVessel>;
-  onMoveEnd: (bbox: { min_lon: number; min_lat: number; max_lon: number; max_lat: number }) => void;
+  onMoveEnd: (view: MapMoveEnd) => void;
   selectedMmsi: string | null;
   onSelectVessel: (mmsi: string | null) => void;
   focusBounds: Bounds | null;
   theme: Theme;
+  // Restores the camera across a route change (Map -> History -> Map),
+  // which fully unmounts this component -- see mapViewMemory.ts.
+  initialCenter?: [number, number];
+  initialZoom?: number;
+  // When set, vessels NOT in this set render dimmed -- lets "show all
+  // vessels" still make a watchlist's members visually stand out.
+  highlightMmsis: Set<string> | null;
 }
 
 export function MapView({
@@ -96,6 +111,9 @@ export function MapView({
   onSelectVessel,
   focusBounds,
   theme,
+  initialCenter,
+  initialZoom,
+  highlightMmsis,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
@@ -121,12 +139,15 @@ export function MapView({
         style: styleUrlForTheme(theme),
         // Default viewport: centred on the whole Baltic Sea (see
         // worker/config.py's DEFAULT_BOUNDING_BOXES), unless a prior
-        // theme switch left a viewport to restore. Zoom clamp 4-12 per
-        // the design's map behaviour spec.
-        center: initialView?.center ?? [19.75, 59.7],
-        zoom: initialView?.zoom ?? 4.7,
+        // theme switch or a just-restored session (see mapViewMemory.ts)
+        // has a viewport to restore instead.
+        center: initialView?.center ?? initialCenter ?? [19.75, 59.7],
+        zoom: initialView?.zoom ?? initialZoom ?? 4.7,
         minZoom: 4,
-        maxZoom: 12,
+        // High enough for harbor/berth-level detail; the basemap simply
+        // overzooms past its own native tile resolution beyond ~16-18,
+        // same as any other web map.
+        maxZoom: 19,
       });
     } catch (err) {
       setMapError(err instanceof Error ? err.message : "Failed to initialize the map");
@@ -213,7 +234,10 @@ export function MapView({
           "icon-allow-overlap": true,
           "icon-size": ["*", ["case", ["get", "isSelected"], 0.85, 0.6], 1.45],
         },
-        paint: { "icon-color": haloColorForTheme(theme), "icon-opacity": 0.85 },
+        paint: {
+          "icon-color": haloColorForTheme(theme),
+          "icon-opacity": ["case", ["get", "isDimmed"], 0.2, 0.85],
+        },
       });
 
       // Shape carries movement state (arrow=under way+oriented,
@@ -248,6 +272,7 @@ export function MapView({
             "#eb817f",
             "#838e97",
           ],
+          "icon-opacity": ["case", ["get", "isDimmed"], 0.35, 1],
         },
       });
 
@@ -315,17 +340,22 @@ export function MapView({
         map.getCanvas().style.cursor = "";
       });
 
-      const emitBbox = () => {
+      const emitMoveEnd = () => {
         const bounds = map.getBounds();
+        const center = map.getCenter();
         onMoveEnd({
-          min_lon: bounds.getWest(),
-          min_lat: bounds.getSouth(),
-          max_lon: bounds.getEast(),
-          max_lat: bounds.getNorth(),
+          bbox: {
+            min_lon: bounds.getWest(),
+            min_lat: bounds.getSouth(),
+            max_lon: bounds.getEast(),
+            max_lat: bounds.getNorth(),
+          },
+          center: [center.lng, center.lat],
+          zoom: map.getZoom(),
         });
       };
-      map.on("moveend", emitBbox);
-      emitBbox();
+      map.on("moveend", emitMoveEnd);
+      emitMoveEnd();
     });
 
     return () => {
@@ -340,7 +370,7 @@ export function MapView({
   useEffect(() => {
     const map = mapRef.current;
     const source = map?.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
-    source?.setData(vesselsToGeoJson(vessels, selectedMmsi));
+    source?.setData(vesselsToGeoJson(vessels, selectedMmsi, highlightMmsis));
 
     const selectionSource = map?.getSource(SELECTION_SOURCE_ID) as
       | maplibregl.GeoJSONSource
@@ -358,7 +388,7 @@ export function MapView({
           ]
         : [],
     });
-  }, [vessels, selectedMmsi]);
+  }, [vessels, selectedMmsi, highlightMmsis]);
 
   useEffect(() => {
     if (focusBounds) {

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { useLiveVessels, type LiveVessel } from "../api/live";
@@ -8,7 +8,7 @@ import { watchlistsApi } from "../api/watchlists";
 import { useTheme } from "../ThemeContext";
 import { DegradationBanner } from "../components/DegradationBanner";
 import { LegendPanel } from "../components/LegendPanel";
-import { MapView } from "../components/MapView";
+import { MapView, type MapMoveEnd } from "../components/MapView";
 import { OnboardingBanner } from "../components/OnboardingBanner";
 import { SearchPanel } from "../components/SearchPanel";
 import { SourcePanel } from "../components/SourcePanel";
@@ -16,6 +16,7 @@ import { VesselDrawer } from "../components/VesselDrawer";
 import { WatchlistPanel } from "../components/WatchlistPanel";
 import type { Freshness } from "../freshness";
 import { freshnessForTime } from "../freshness";
+import { getMapViewMemory, saveMapViewMemory } from "../mapViewMemory";
 
 // Matches worker/config.py's DEFAULT_BOUNDING_BOXES: the whole Baltic Sea.
 const DEFAULT_BBOX = { min_lon: 9, min_lat: 53.5, max_lon: 30.5, max_lat: 65.9 };
@@ -35,7 +36,15 @@ function boundsFromVessels(vessels: { lon: number | null; lat: number | null }[]
 
 export function MapPage() {
   const { theme } = useTheme();
-  const [bbox, setBbox] = useState(DEFAULT_BBOX);
+  // MapPage/MapView fully unmount on route change (e.g. to History), so
+  // plain useState would reset to defaults every time -- restore from
+  // the last session's remembered viewport/filters instead, unless a
+  // deep link (Watchlists' "View on map") says otherwise. mapViewMemory
+  // is read once, here, since it's only meant to seed the initial state.
+  const rememberedRef = useRef(getMapViewMemory());
+  const remembered = rememberedRef.current;
+
+  const [bbox, setBbox] = useState(remembered?.bbox ?? DEFAULT_BBOX);
   const { vessels: allVessels, connected } = useLiveVessels(bbox);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -50,10 +59,21 @@ export function MapPage() {
 
   const [selectedMmsi, setSelectedMmsi] = useState<string | null>(null);
   const [selectedWatchlistId, setSelectedWatchlistId] = useState<string | null>(
-    searchParams.get("watchlist")
+    searchParams.get("watchlist") ?? remembered?.selectedWatchlistId ?? null
   );
-  const [freshnessFilter, setFreshnessFilter] = useState<Set<Freshness>>(new Set());
-  const [watchlistOnly, setWatchlistOnly] = useState(false);
+  const [freshnessFilter, setFreshnessFilter] = useState<Set<Freshness>>(
+    new Set(remembered?.freshnessFilter ?? [])
+  );
+  const [watchlistOnly, setWatchlistOnly] = useState(remembered?.watchlistOnly ?? false);
+  // Only an explicit click on a watchlist (handleSelectWatchlist) should
+  // pan/zoom to fit it -- restoring a remembered selection on mount must
+  // leave the just-restored viewport alone.
+  const focusRequestedRef = useRef(false);
+  // Not React state -- written on every moveend, read only when we need
+  // to persist a snapshot alongside filter changes.
+  const cameraRef = useRef<{ center: [number, number]; zoom: number } | null>(
+    remembered ? { center: remembered.center, zoom: remembered.zoom } : null
+  );
 
   // Deep-link param only sets initial state (from the Watchlists page's
   // "View on map" link); clear it so it doesn't re-fire.
@@ -63,6 +83,26 @@ export function MapPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function handleMoveEnd(view: MapMoveEnd) {
+    setBbox(view.bbox);
+    cameraRef.current = { center: view.center, zoom: view.zoom };
+  }
+
+  // Persist a full snapshot whenever the viewport or any filter changes,
+  // so the next mount (see rememberedRef above) picks up right where
+  // this one left off.
+  useEffect(() => {
+    if (!cameraRef.current) return;
+    saveMapViewMemory({
+      center: cameraRef.current.center,
+      zoom: cameraRef.current.zoom,
+      bbox,
+      selectedWatchlistId,
+      watchlistOnly,
+      freshnessFilter: Array.from(freshnessFilter),
+    });
+  }, [bbox, selectedWatchlistId, watchlistOnly, freshnessFilter]);
 
   const watchlistsQuery = useQuery({ queryKey: ["watchlists"], queryFn: watchlistsApi.list });
   const watchlistDetailQuery = useQuery({
@@ -109,8 +149,12 @@ export function MapPage() {
   }
 
   function handleSelectWatchlist(id: string | null) {
+    focusRequestedRef.current = true;
     setSelectedWatchlistId(id);
-    if (!id) setWatchlistOnly(false);
+    // Picking a list defaults to showing only its members -- "show all,
+    // but distinguish them" is an explicit opt-out via the checkbox, not
+    // the default a fresh selection lands on.
+    setWatchlistOnly(id !== null);
   }
 
   const watchlistDetail = watchlistDetailQuery.data;
@@ -141,11 +185,23 @@ export function MapPage() {
 
   // Widen the viewport to include every watchlisted vessel's last known
   // position when a list is selected, so out-of-view members actually show
-  // up instead of looking like they're missing.
+  // up instead of looking like they're missing. Only for an explicit
+  // click (focusRequestedRef) -- never for a selection merely restored
+  // from a remembered session, which should leave the viewport alone.
   const focusBounds = useMemo(() => {
-    if (!selectedWatchlistId || !watchlistDetail) return null;
+    if (!selectedWatchlistId || !watchlistDetail || !focusRequestedRef.current) return null;
+    focusRequestedRef.current = false;
     return boundsFromVessels(watchlistDetail.vessels);
   }, [selectedWatchlistId, watchlistDetail]);
+
+  // Only meaningful when NOT already filtering the map down to just this
+  // list (watchlistOnly already achieves that by hiding everything
+  // else) -- lets "show all vessels" still make a list's members stand
+  // out instead of blending in with everything else.
+  const highlightMmsis = useMemo(() => {
+    if (!selectedWatchlistId || watchlistOnly || !watchlistDetail) return null;
+    return new Set(watchlistDetail.vessels.map((v) => v.mmsi));
+  }, [selectedWatchlistId, watchlistOnly, watchlistDetail]);
 
   const selectedVessel = selectedMmsi ? allVessels.get(selectedMmsi) : undefined;
 
@@ -153,11 +209,14 @@ export function MapPage() {
     <div className="map-page">
       <MapView
         vessels={vessels}
-        onMoveEnd={setBbox}
+        onMoveEnd={handleMoveEnd}
         selectedMmsi={selectedMmsi}
         onSelectVessel={handleSelectVessel}
         focusBounds={focusBounds}
         theme={theme}
+        initialCenter={remembered?.center}
+        initialZoom={remembered?.zoom}
+        highlightMmsis={highlightMmsis}
       />
 
       <button

@@ -128,6 +128,12 @@ export function HistoryPage() {
       queryFn: () => tracksApi.getRange(v.mmsi, from, to),
       enabled: validWindow,
     })),
+    // `useQueries` otherwise returns a brand-new array every render (even
+    // when nothing changed) -- `combine` gets TanStack Query's structural
+    // sharing, so the memos below don't recompute (and TrackMapView
+    // doesn't re-fit its viewport) on a render caused by unrelated state
+    // like the track map's own hover tooltip.
+    combine: (results) => results,
   });
 
   function handleSelectVessel(v: VesselSearchResult) {

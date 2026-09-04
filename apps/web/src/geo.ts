@@ -25,6 +25,21 @@ export function haversineMeters(a: { lat: number; lon: number }, b: { lat: numbe
   return EARTH_RADIUS_M * c;
 }
 
+/** Initial forward bearing in degrees (0-360, 0 = north) from a to b --
+ * used to orient a track's "latest position" icon when the source data
+ * carries no true heading of its own (position_observations only stores
+ * speed, not heading/COG). */
+export function bearingDeg(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  const deg = (Math.atan2(y, x) * 180) / Math.PI;
+  return (deg + 360) % 360;
+}
+
 /** Geodesic circle approximation (spherical-earth destination-point
  * formula) around (centerLon, centerLat) with the given radius in
  * meters, as a closed ring of [lon, lat] pairs -- mirrors
