@@ -39,7 +39,7 @@ function VesselTableRow({ vessel, onRemove }: { vessel: WatchlistVessel; onRemov
       </td>
       <td>
         <div className="name">{vessel.name ?? "Unknown"}</div>
-        <div className="sub mono">{vessel.mmsi} · no IMO</div>
+        <div className="sub mono">{vessel.mmsi}{vessel.imo ? ` · IMO ${vessel.imo}` : " · no IMO"}</div>
       </td>
       <td>{lastSeenTime ? <Freshness time={lastSeenTime} showAge /> : <Unknown text="Never seen" />}</td>
       <td className="num" style={{ color: "var(--dim)" }}>
@@ -53,13 +53,10 @@ function VesselTableRow({ vessel, onRemove }: { vessel: WatchlistVessel; onRemov
         </div>
       </td>
       <td>
-        <Unknown text="Not reported" />
+        {vessel.destination ?? <Unknown text="Not reported" />}
       </td>
       <td style={{ maxWidth: 150 }}>{formatNavStatus(vessel.nav_status)}</td>
-      <td>
-        Unknown
-        <div className="sub mono">unknown</div>
-      </td>
+      <td>{vessel.ship_type ?? "Unknown"}</td>
       <td>
         <span className="sub">—</span>
       </td>
@@ -84,7 +81,7 @@ function VesselCard({ vessel, onRemove }: { vessel: WatchlistVessel; onRemove: (
           {lastSeenTime && <Freshness time={lastSeenTime} noWord showAge />}
         </div>
       </div>
-      <div className="sub watchlists-card-sub">{vessel.mmsi} · Unknown</div>
+      <div className="sub watchlists-card-sub">{vessel.mmsi} · {vessel.ship_type ?? "Unknown"}</div>
       <div className="hr" style={{ margin: "9px -12px" }} />
       <div className="watchlists-card-grid">
         <div>
@@ -97,7 +94,7 @@ function VesselCard({ vessel, onRemove }: { vessel: WatchlistVessel; onRemove: (
         </div>
         <div>
           <div className="eyebrow">Destination</div>
-          <div className="mono">—</div>
+          <div className="mono">{vessel.destination ?? "—"}</div>
         </div>
         <div>
           <div className="eyebrow">Source</div>

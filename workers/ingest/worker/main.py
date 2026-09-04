@@ -68,16 +68,28 @@ async def _ingest_loop(
 
             inserted = False
             async with engine.begin() as conn:
-                await upsert_vessel_identity(conn, obs.mmsi, obs.name)
-                # Identity-only messages (e.g. AISStream ShipStaticData)
-                # carry no position -- upsert_vessel_latest would otherwise
-                # null out a vessel's last known position/kinematics.
+                await upsert_vessel_identity(
+                    conn,
+                    obs.mmsi,
+                    obs.name,
+                    imo=obs.imo,
+                    callsign=obs.callsign,
+                    ship_type=obs.ship_type,
+                    dimensions=obs.dimensions,
+                )
+                # upsert_vessel_latest COALESCEs every field against the
+                # existing row, so calling it even for an identity-only
+                # message (no position) is safe -- it can only fill in
+                # destination/ETA/draught, never null out a previously
+                # known position/speed/heading.
+                previous_position = None
                 if obs.position is not None:
                     # Must run before the upsert overwrites it -- this is
                     # the "old" point geofence enter/exit needs to detect
                     # a transition against.
                     previous_position = await get_previous_position(conn, obs.mmsi)
-                    await upsert_vessel_latest(conn, obs)
+                await upsert_vessel_latest(conn, obs)
+                if obs.position is not None:
                     inserted = await insert_position_observation(conn, obs)
                     if inserted:
                         # Alerts only evaluate accepted state (PRD/design

@@ -3,7 +3,9 @@
 - Status: Accepted (the bounding boxes described below are the
   2026-09-02 capture spike's, not the current live config — see
   [ADR-0003](0003-post-phase1-notes.md) and `docs/data-source-register.md`
-  for how coverage changed after this)
+  for how coverage changed after this; the "IMO/callsign/destination/
+  dimensions/ETA aren't extracted yet" scope cut below was reversed by
+  [ADR-0005](0005-vessel-identity-sheet.md))
 - Date: 2026-09-02
 
 ## Context

@@ -9,7 +9,7 @@ from canonical import CanonicalAisObservation
 from geoalchemy2 import Geometry
 from geoalchemy2.elements import WKTElement
 from geoalchemy2.functions import ST_X, ST_Y
-from sqlalchemy import cast, select
+from sqlalchemy import cast, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -40,14 +40,55 @@ async def get_previous_position(
     return (row[0], row[1])
 
 
-async def upsert_vessel_identity(conn: AsyncConnection, mmsi: str, name: Optional[str]) -> None:
-    stmt = pg_insert(vessels).values(mmsi=mmsi, name=name)
+async def upsert_vessel_identity(
+    conn: AsyncConnection,
+    mmsi: str,
+    name: Optional[str],
+    imo: Optional[int] = None,
+    callsign: Optional[str] = None,
+    ship_type: Optional[str] = None,
+    dimensions: Optional[dict] = None,
+) -> None:
+    """Each field is only overwritten when the new message actually
+    carries a value for it (COALESCE against the existing row) -- name,
+    IMO, callsign, type, and dimensions arrive on different message
+    types at different times, so a message that only knows the name
+    must not null out a type learned from an earlier message."""
+    values = {
+        "mmsi": mmsi,
+        "name": name,
+        "imo": imo,
+        "callsign": callsign,
+        "ship_type": ship_type,
+        "dimensions": dimensions,
+    }
+    stmt = pg_insert(vessels).values(**values)
     stmt = stmt.on_conflict_do_update(
         index_elements=[vessels.c.mmsi],
-        set_={"name": stmt.excluded.name},
-        where=stmt.excluded.name.is_not(None),
+        set_={
+            k: func.coalesce(stmt.excluded[k], vessels.c[k]) for k in values if k != "mmsi"
+        },
     )
     await conn.execute(stmt)
+
+
+# Fields describing the vessel's current attributes -- a message that
+# doesn't mention one (e.g. a position report carries no destination)
+# must not erase a value learned from an earlier message. Fields NOT in
+# this set (received_at, observed_at, quality_flags, provenance) describe
+# facts about *this specific message* and are always overwritten flat.
+_VESSEL_LATEST_COALESCE_FIELDS = frozenset(
+    {
+        "position",
+        "sog_kn",
+        "cog_deg",
+        "heading_deg",
+        "nav_status",
+        "destination",
+        "eta_text",
+        "draught_m",
+    }
+)
 
 
 async def upsert_vessel_latest(conn: AsyncConnection, obs: CanonicalAisObservation) -> None:
@@ -62,13 +103,24 @@ async def upsert_vessel_latest(conn: AsyncConnection, obs: CanonicalAisObservati
         "heading_deg": obs.heading_deg,
         "nav_status": obs.nav_status.value if obs.nav_status else None,
         "destination": obs.destination,
+        "eta_text": obs.eta_text,
+        "draught_m": obs.draught_m,
         "quality_flags": [f.value for f in obs.quality_flags],
         "provenance": {"source": obs.source.value, "received_at": obs.received_at.isoformat()},
     }
     stmt = pg_insert(vessel_latest).values(**values)
+    set_ = {
+        k: (
+            func.coalesce(stmt.excluded[k], vessel_latest.c[k])
+            if k in _VESSEL_LATEST_COALESCE_FIELDS
+            else stmt.excluded[k]
+        )
+        for k in values
+        if k != "mmsi"
+    }
     stmt = stmt.on_conflict_do_update(
         index_elements=[vessel_latest.c.mmsi],
-        set_={k: stmt.excluded[k] for k in values if k != "mmsi"},
+        set_=set_,
         where=(vessel_latest.c.received_at < stmt.excluded.received_at),
     )
     await conn.execute(stmt)

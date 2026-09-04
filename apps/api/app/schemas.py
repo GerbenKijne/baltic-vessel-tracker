@@ -43,6 +43,17 @@ class VesselSearchResultOut(BaseModel):
     last_received_at: Optional[datetime]
 
 
+class VesselDetailOut(BaseModel):
+    mmsi: str
+    imo: Optional[int]
+    callsign: Optional[str]
+    ship_type: Optional[str]
+    dimensions: Optional[dict]
+    destination: Optional[str]
+    eta_text: Optional[str]
+    draught_m: Optional[float]
+
+
 class WatchlistCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
 
@@ -73,6 +84,9 @@ class WatchlistVesselOut(BaseModel):
     heading_deg: Optional[int]
     nav_status: Optional[str]
     quality_flags: list[str]
+    imo: Optional[int]
+    ship_type: Optional[str]
+    destination: Optional[str]
 
 
 class WatchlistDetailOut(BaseModel):

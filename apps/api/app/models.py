@@ -73,6 +73,8 @@ class VesselLatest(Base):
     heading_deg: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     nav_status: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     destination: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    eta_text: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    draught_m: Mapped[Optional[float]] = mapped_column(Numeric, nullable=True)
     quality_flags: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
     provenance: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 

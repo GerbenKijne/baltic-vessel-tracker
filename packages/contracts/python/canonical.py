@@ -68,7 +68,11 @@ class CanonicalAisObservation(BaseModel):
     nav_status: Optional[NavStatus] = None
     name: Optional[str] = None
     callsign: Optional[str] = None
+    ship_type: Optional[str] = None
+    dimensions: Optional[dict] = None
     destination: Optional[str] = None
+    eta_text: Optional[str] = None
+    draught_m: Optional[float] = None
     quality_flags: list[QualityFlag] = Field(default_factory=list)
     raw_ref: Optional[UUID] = None
 

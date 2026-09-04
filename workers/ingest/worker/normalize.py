@@ -34,6 +34,97 @@ class IgnorableMessage(ValueError):
     specifically.
     """
 
+def _ais_ship_type_category(code: Optional[int]) -> Optional[str]:
+    """ITU-R M.1371 Table 50 (ship and cargo type), collapsed to a
+    friendly category label -- the standard's hazard-cargo subcodes
+    (e.g. 71-74 = cargo carrying hazard categories A-D) aren't surfaced
+    separately; this app only needs "what kind of ship", not IMDG hazard
+    classification."""
+    if not code:
+        return None
+    if 20 <= code <= 29:
+        return "Wing in ground craft"
+    if code == 30:
+        return "Fishing vessel"
+    if code in (31, 32):
+        return "Tug / towing vessel"
+    if code == 33:
+        return "Dredger"
+    if code == 34:
+        return "Diving vessel"
+    if code == 35:
+        return "Military vessel"
+    if code == 36:
+        return "Sailing vessel"
+    if code == 37:
+        return "Pleasure craft"
+    if 40 <= code <= 49:
+        return "High-speed craft"
+    if code == 50:
+        return "Pilot vessel"
+    if code == 51:
+        return "Search and rescue vessel"
+    if code == 52:
+        return "Tug"
+    if code == 53:
+        return "Port tender"
+    if code == 54:
+        return "Anti-pollution vessel"
+    if code == 55:
+        return "Law enforcement vessel"
+    if code in (56, 57):
+        return "Local vessel"
+    if code == 58:
+        return "Medical transport"
+    if code == 59:
+        return "Noncombatant ship"
+    if 60 <= code <= 69:
+        return "Passenger vessel"
+    if 70 <= code <= 79:
+        return "Cargo vessel"
+    if 80 <= code <= 89:
+        return "Tanker"
+    if 90 <= code <= 99:
+        return "Other"
+    return None
+
+
+def _extract_dimensions(dimension: Optional[dict]) -> Optional[dict]:
+    """AIS reports distances from the GPS antenna to bow/stern/port/
+    starboard (A/B/C/D), all zero meaning "not available" -- LOA = A+B,
+    beam = C+D."""
+    if not dimension:
+        return None
+    a, b, c, d = (dimension.get(k) or 0 for k in ("A", "B", "C", "D"))
+    if a == 0 and b == 0 and c == 0 and d == 0:
+        return None
+    return {"loa_m": a + b, "beam_m": c + d}
+
+
+def _extract_eta_text(eta: Optional[dict]) -> Optional[str]:
+    """AIS ETA carries no year (just month/day/hour/minute), and 0/24/60
+    are the field's own "not available" sentinels -- formatted as text
+    rather than a real datetime so this never invents a year the
+    provider didn't give us."""
+    if not eta:
+        return None
+    month, day = eta.get("Month") or 0, eta.get("Day") or 0
+    if not (1 <= month <= 12) or not (1 <= day <= 31):
+        return None
+    text = f"{month:02d}-{day:02d}"
+    hour, minute = eta.get("Hour"), eta.get("Minute")
+    if hour is not None and minute is not None and 0 <= hour <= 23 and 0 <= minute <= 59:
+        text += f" {hour:02d}:{minute:02d}"
+    return text
+
+
+def _extract_draught(value: Optional[float]) -> Optional[float]:
+    # 25.5 is AIS's "not available" sentinel for MaximumStaticDraught.
+    if value is None or value <= 0 or value >= 25.5:
+        return None
+    return float(value)
+
+
 _NAV_STATUS_MAP = {
     0: NavStatus.UNDER_WAY_USING_ENGINE,
     1: NavStatus.AT_ANCHOR,
@@ -68,8 +159,13 @@ class _ExtractedFields:
     nav_status_code: Optional[int] = None
     observed_at: Optional[datetime] = None
     name: Optional[str] = None
+    imo: Optional[int] = None
     callsign: Optional[str] = None
+    ship_type: Optional[str] = None
+    dimensions: Optional[dict] = None
     destination: Optional[str] = None
+    eta_text: Optional[str] = None
+    draught_m: Optional[float] = None
     quality_flags: list[QualityFlag] = field(default_factory=list)
     # Distinguishes payloads that would otherwise collide in the
     # minute-bucketed identity dedupe key -- e.g. StaticDataReport's Part
@@ -199,34 +295,55 @@ def _extract_aisstream(raw: dict) -> _ExtractedFields:
         )
 
     if message_type == "ShipStaticData":
-        # Identity only; no position. Deliberately not extracting
-        # IMO/callsign/destination/dimensions/ETA yet -- vessel detail
-        # richness is Phase 3 scope (PRD SS19), and extending
-        # upsert_vessel_identity to store them is a bigger, separate
-        # change (see docs/data-source-register.md).
+        # Identity + voyage data, no position. Every field here is
+        # optional per-message (a vessel might send this before it ever
+        # sends a real value for some of them) -- upsert_vessel_identity
+        # / upsert_vessel_latest only overwrite a stored value when the
+        # new one is non-null, so a sparse message never clobbers a
+        # previously learned one.
+        imo = body.get("ImoNumber")
         return _ExtractedFields(
             mmsi=mmsi,
             message_type=_AIS_MSG_TYPE_STATIC_AND_VOYAGE_DATA,
             name=_clean_text(body.get("Name")),
+            imo=imo if imo else None,
+            callsign=_clean_text(body.get("CallSign")),
+            ship_type=_ais_ship_type_category(body.get("Type")),
+            dimensions=_extract_dimensions(body.get("Dimension")),
+            destination=_clean_text(body.get("Destination")),
+            eta_text=_extract_eta_text(body.get("Eta")),
+            draught_m=_extract_draught(body.get("MaximumStaticDraught")),
         )
 
     if message_type == "StaticDataReport":
         # Class B's equivalent of ShipStaticData, split across two
         # messages sharing the same MMSI: Part A (PartNumber False) has
-        # the name, Part B has type/callsign/dimensions. Same identity-
-        # only scope as ShipStaticData above -- only Part A's name is
-        # extracted; a Part B message legitimately carries no name, and
-        # upsert_vessel_identity already ignores a None name rather than
-        # clobbering a previously known one.
+        # the name, Part B has type/callsign/dimensions -- Class B never
+        # carries IMO/destination/ETA/draught at all (those fields don't
+        # exist in this message per the AIS standard). A Part B message
+        # legitimately carries no name (and vice versa); upsert_vessel_identity
+        # already ignores a None value per-field rather than clobbering
+        # a previously known one.
         part_number = body.get("PartNumber")
         name = None
+        callsign = None
+        ship_type = None
+        dimensions = None
         if part_number is False:
             name = _clean_text((body.get("ReportA") or {}).get("Name"))
+        else:
+            report_b = body.get("ReportB") or {}
+            callsign = _clean_text(report_b.get("CallSign"))
+            ship_type = _ais_ship_type_category(report_b.get("ShipType"))
+            dimensions = _extract_dimensions(report_b.get("Dimension"))
         discriminator = "static-data-report-part-b" if part_number else "static-data-report-part-a"
         return _ExtractedFields(
             mmsi=mmsi,
             message_type=_AIS_MSG_TYPE_STATIC_DATA_REPORT,
             name=name,
+            callsign=callsign,
+            ship_type=ship_type,
+            dimensions=dimensions,
             identity_discriminator=discriminator,
         )
 
@@ -294,8 +411,13 @@ def parse_and_normalize(
         heading_deg=heading,
         nav_status=nav_status,
         name=fields.name,
+        imo=fields.imo,
         callsign=fields.callsign,
+        ship_type=fields.ship_type,
+        dimensions=fields.dimensions,
         destination=fields.destination,
+        eta_text=fields.eta_text,
+        draught_m=fields.draught_m,
         quality_flags=fields.quality_flags,
         raw_ref=raw_ref,
     )

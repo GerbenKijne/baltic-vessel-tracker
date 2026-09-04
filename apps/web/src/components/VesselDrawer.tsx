@@ -1,7 +1,9 @@
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import type { LiveVessel } from "../api/live";
 import type { Watchlist } from "../api/watchlists";
+import { vesselsApi } from "../api/vessels";
 import { sourceLabel } from "../sourceLabels";
 import { Freshness } from "./Freshness";
 
@@ -42,6 +44,15 @@ export function VesselDrawer({
   const [addOpen, setAddOpen] = useState(false);
   const [addStatus, setAddStatus] = useState<string | null>(null);
   const [selectedList, setSelectedList] = useState("");
+
+  // Identity/voyage data (IMO, type, dimensions, destination, ETA) comes
+  // from sporadic static-data messages, not the live position feed --
+  // fetched separately so it doesn't flicker to "Unknown" between them.
+  const detailQuery = useQuery({
+    queryKey: ["vessel-detail", vessel.mmsi],
+    queryFn: () => vesselsApi.getDetail(vessel.mmsi),
+  });
+  const detail = detailQuery.data;
 
   const lastSeenTime = vessel.observedAt ?? vessel.receivedAt;
   const receivedDeltaMs = vessel.observedAt
@@ -160,13 +171,21 @@ export function VesselDrawer({
           <dt>MMSI</dt>
           <dd>{vessel.mmsi}</dd>
           <dt>IMO</dt>
-          <Unknown />
+          {detail?.imo != null ? <dd>{detail.imo}</dd> : <Unknown />}
+          <dt>Callsign</dt>
+          {detail?.callsign ? <dd>{detail.callsign}</dd> : <Unknown />}
           <dt>Type</dt>
-          <Unknown />
+          {detail?.ship_type ? <dd>{detail.ship_type}</dd> : <Unknown />}
           <dt>LOA × beam</dt>
-          <Unknown />
+          {detail?.dimensions ? (
+            <dd>
+              {detail.dimensions.loa_m} × {detail.dimensions.beam_m} m
+            </dd>
+          ) : (
+            <Unknown />
+          )}
           <dt>Draught</dt>
-          <Unknown />
+          {detail?.draught_m != null ? <dd>{detail.draught_m.toFixed(1)} m</dd> : <Unknown />}
         </dl>
         <div className="sect eyebrow">Voyage</div>
         <dl className="kv">
@@ -189,9 +208,9 @@ export function VesselDrawer({
           <dt>Heading</dt>
           {vessel.headingDeg != null ? <dd>{vessel.headingDeg}°</dd> : <Unknown />}
           <dt>Destination</dt>
-          <Unknown text="Not reported" />
+          {detail?.destination ? <dd>{detail.destination}</dd> : <Unknown text="Not reported" />}
           <dt>ETA</dt>
-          <Unknown text="Not reported" />
+          {detail?.eta_text ? <dd>{detail.eta_text}</dd> : <Unknown text="Not reported" />}
         </dl>
       </div>
     </aside>

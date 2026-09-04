@@ -19,7 +19,9 @@ to its users (see the LICENSE file for the exact terms).
 - **Live map** (MapLibre GL JS): vessel markers with heading-rotated
   arrows (shape carries movement state — arrow/square/circle — so
   freshness color is never the only signal), clustering below zoom 7,
-  click-to-inspect detail drawer, light/dark themes, mobile-responsive
+  click-to-inspect detail drawer with the full identity/voyage sheet
+  (ship type, IMO, callsign, dimensions, destination, ETA, draught, when
+  the source has reported them), light/dark themes, mobile-responsive
   floating panels.
 - **Watchlists**: save vessels to named lists, filter the map to just a
   list's members, CSV/GeoJSON export, CSV import.

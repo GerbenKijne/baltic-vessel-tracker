@@ -95,6 +95,8 @@ async def get_watchlist(
         select(
             WatchlistVessel,
             Vessel.name,
+            Vessel.imo,
+            Vessel.ship_type,
             ST_X(position_geom).label("lon"),
             ST_Y(position_geom).label("lat"),
             VesselLatest.observed_at,
@@ -103,6 +105,7 @@ async def get_watchlist(
             VesselLatest.cog_deg,
             VesselLatest.heading_deg,
             VesselLatest.nav_status,
+            VesselLatest.destination,
             VesselLatest.quality_flags,
         )
         .join(Vessel, Vessel.mmsi == WatchlistVessel.mmsi)
@@ -114,8 +117,8 @@ async def get_watchlist(
 
     vessels = []
     for row in rows:
-        wv, name, lon, lat, observed_at, received_at = row[:6]
-        sog_kn, cog_deg, heading_deg, nav_status, quality_flags = row[6:]
+        wv, name, imo, ship_type, lon, lat, observed_at, received_at = row[:8]
+        sog_kn, cog_deg, heading_deg, nav_status, destination, quality_flags = row[8:]
         vessels.append(
             WatchlistVesselOut(
                 mmsi=wv.mmsi,
@@ -132,6 +135,9 @@ async def get_watchlist(
                 heading_deg=heading_deg,
                 nav_status=nav_status,
                 quality_flags=quality_flags or [],
+                imo=imo,
+                ship_type=ship_type,
+                destination=destination,
             )
         )
 

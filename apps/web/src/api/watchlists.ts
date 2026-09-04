@@ -22,6 +22,9 @@ export interface WatchlistVessel {
   heading_deg: number | null;
   nav_status: string | null;
   quality_flags: string[];
+  imo: number | null;
+  ship_type: string | null;
+  destination: string | null;
 }
 
 export interface WatchlistDetail {

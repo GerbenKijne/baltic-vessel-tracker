@@ -15,6 +15,7 @@ from ..schemas import (
     TrackOut,
     TrackPointOut,
     TrackSegmentOut,
+    VesselDetailOut,
     VesselListOut,
     VesselOut,
     VesselSearchResultOut,
@@ -127,6 +128,51 @@ async def search_vessels(
         )
         for vessel, observed_at, received_at in rows
     ]
+
+
+@router.get(
+    "/{mmsi}", response_model=VesselDetailOut, dependencies=[Depends(get_current_user)]
+)
+async def get_vessel_detail(mmsi: str, db: AsyncSession = Depends(get_db)) -> VesselDetailOut:
+    """The identity/voyage sheet (IMO, callsign, type, dimensions,
+    destination, ETA, draught) -- kept separate from the live map feed
+    and its snapshot/upsert messages on purpose. Those only carry a
+    field when the specific message that triggered them mentioned it
+    (e.g. a position report never carries a name), so building this
+    view from live-feed pushes would make it flicker to "Unknown"
+    between the sporadic static-data messages that actually fill it in.
+    This endpoint reads the already-merged `vessels`/`vessel_latest`
+    rows instead, which never regress a known value (see
+    persistence.py's per-field COALESCE)."""
+    row = (
+        await db.execute(
+            select(
+                Vessel.mmsi,
+                Vessel.imo,
+                Vessel.callsign,
+                Vessel.ship_type,
+                Vessel.dimensions,
+                VesselLatest.destination,
+                VesselLatest.eta_text,
+                VesselLatest.draught_m,
+            )
+            .outerjoin(VesselLatest, VesselLatest.mmsi == Vessel.mmsi)
+            .where(Vessel.mmsi == mmsi)
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Vessel not found")
+
+    return VesselDetailOut(
+        mmsi=row.mmsi,
+        imo=row.imo,
+        callsign=row.callsign,
+        ship_type=row.ship_type,
+        dimensions=row.dimensions,
+        destination=row.destination,
+        eta_text=row.eta_text,
+        draught_m=float(row.draught_m) if row.draught_m is not None else None,
+    )
 
 
 # Hard safety cap independent of the query window -- a wide time window on a

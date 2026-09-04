@@ -63,14 +63,20 @@ terms review are both done for *this* deployment — see
   pleasure craft, and small fishing boats actually carry, and never
   reports navigational status (that field simply doesn't exist on those
   message types, unlike Class A).
-- `ShipStaticData` and `StaticDataReport` carry no position; they only
-  update the vessel's name via `upsert_vessel_identity`.
-  `StaticDataReport` splits across two messages sharing an MMSI (`PartNumber`
-  false = name, true = type/callsign/dimensions) — only the name is
-  extracted, same scope cut as `ShipStaticData`. IMO/callsign/destination/
-  dimensions aren't extracted yet from either message type — that's
-  Phase 3 "vessel sheet" scope (PRD SS19), not required for the ingestion
-  pipeline itself.
+- `ShipStaticData` and `StaticDataReport` carry no position; they update
+  the vessel's identity/voyage sheet instead -- name, IMO, callsign, ship
+  type (resolved from the AIS numeric code to a category label by
+  `_ais_ship_type_category` in `normalize.py`), dimensions (LOA/beam,
+  summed from the reported bow/stern/port/starboard distances),
+  destination, ETA (formatted as text, not a real date -- AIS's ETA has
+  no year), and draught. `StaticDataReport` splits across two messages
+  sharing an MMSI (`PartNumber` false = name, true = type/callsign/
+  dimensions); Class B never carries IMO/destination/ETA/draught at all
+  (those fields don't exist on that message per the AIS standard).
+  `upsert_vessel_identity`/`upsert_vessel_latest` COALESCE each field
+  against the existing row, so a sparse message (e.g. only a name) never
+  clobbers a value already learned from an earlier one. See
+  docs/adr/0005-vessel-identity-sheet.md.
 - AIS's `PositionReport.Timestamp` field is only the UTC *second* the
   report was generated (0-59), not a usable full timestamp on its own —
   this adapter does not attempt to reconstruct one from it.

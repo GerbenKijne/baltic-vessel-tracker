@@ -50,6 +50,8 @@ vessel_latest = Table(
     Column("heading_deg", Integer, nullable=True),
     Column("nav_status", String(40), nullable=True),
     Column("destination", Text, nullable=True),
+    Column("eta_text", String(20), nullable=True),
+    Column("draught_m", Numeric, nullable=True),
     Column("quality_flags", ARRAY(Text), nullable=False),
     Column("provenance", JSONB, nullable=False),
 )
