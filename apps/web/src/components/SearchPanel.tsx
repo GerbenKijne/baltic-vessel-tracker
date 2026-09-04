@@ -18,6 +18,12 @@ interface Props {
   freshnessFilter: Set<FreshnessState>;
   onToggleFreshnessFilter: (state: FreshnessState) => void;
   watchlistedMmsis: Set<string>;
+  // Only the categories actually present among currently-known vessels
+  // (see MapPage) -- empty until at least one vessel's static-data
+  // message has been captured, which is sporadic (see docs/adr/0005).
+  typeOptions: string[];
+  typeFilter: Set<string>;
+  onToggleTypeFilter: (type: string) => void;
 }
 
 export function SearchPanel({
@@ -26,6 +32,9 @@ export function SearchPanel({
   freshnessFilter,
   onToggleFreshnessFilter,
   watchlistedMmsis,
+  typeOptions,
+  typeFilter,
+  onToggleTypeFilter,
 }: Props) {
   const [query, setQuery] = useState("");
 
@@ -80,13 +89,26 @@ export function SearchPanel({
         </div>
       )}
       <div className="map-filter-row">
-        <span
-          className="chip"
-          style={{ borderStyle: "dashed", background: "none" }}
-          title="Vessel type isn't available from any connected source yet"
-        >
-          Type filters unavailable
-        </span>
+        {typeOptions.length > 0 ? (
+          typeOptions.map((type) => (
+            <button
+              key={type}
+              className="chip"
+              aria-pressed={typeFilter.has(type)}
+              onClick={() => onToggleTypeFilter(type)}
+            >
+              {type}
+            </button>
+          ))
+        ) : (
+          <span
+            className="chip"
+            style={{ borderStyle: "dashed", background: "none" }}
+            title="No vessel's type has been reported by a connected source yet — AIS only sends it every few minutes, and just for vessels currently in range"
+          >
+            No ship types seen yet
+          </span>
+        )}
       </div>
       <div className="map-filter-row">
         {FRESHNESS_FILTERS.map((state) => (

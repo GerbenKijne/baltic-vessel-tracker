@@ -14,6 +14,7 @@ export interface MapViewMemory {
   selectedWatchlistId: string | null;
   watchlistOnly: boolean;
   freshnessFilter: Freshness[];
+  typeFilter: string[];
 }
 
 // Module-level, not React state: MapPage/MapView fully unmount when

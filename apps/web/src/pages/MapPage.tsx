@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { useLiveVessels, type LiveVessel } from "../api/live";
 import { sourcesApi } from "../api/sources";
+import { vesselsApi } from "../api/vessels";
 import { watchlistsApi } from "../api/watchlists";
 import { useTheme } from "../ThemeContext";
 import { DegradationBanner } from "../components/DegradationBanner";
@@ -64,6 +65,7 @@ export function MapPage() {
   const [freshnessFilter, setFreshnessFilter] = useState<Set<Freshness>>(
     new Set(remembered?.freshnessFilter ?? [])
   );
+  const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set(remembered?.typeFilter ?? []));
   const [watchlistOnly, setWatchlistOnly] = useState(remembered?.watchlistOnly ?? false);
   // Only an explicit click on a watchlist (handleSelectWatchlist) should
   // pan/zoom to fit it -- restoring a remembered selection on mount must
@@ -101,8 +103,9 @@ export function MapPage() {
       selectedWatchlistId,
       watchlistOnly,
       freshnessFilter: Array.from(freshnessFilter),
+      typeFilter: Array.from(typeFilter),
     });
-  }, [bbox, selectedWatchlistId, watchlistOnly, freshnessFilter]);
+  }, [bbox, selectedWatchlistId, watchlistOnly, freshnessFilter, typeFilter]);
 
   const watchlistsQuery = useQuery({ queryKey: ["watchlists"], queryFn: watchlistsApi.list });
   const watchlistDetailQuery = useQuery({
@@ -123,6 +126,18 @@ export function MapPage() {
     queryFn: sourcesApi.list,
     refetchInterval: 15_000,
   });
+  // Ship type trickles in slowly (only sporadic static-data AIS messages
+  // carry it -- see docs/adr/0005), so this is worth refetching on an
+  // interval rather than just once, but not tightly -- it doesn't need
+  // to be more current than "within the last minute or so".
+  const shipTypesQuery = useQuery({
+    queryKey: ["vessels", "ship-types"],
+    queryFn: vesselsApi.shipTypes,
+    refetchInterval: 60_000,
+  });
+  // A stable empty-object fallback -- `?? {}` would create a new
+  // reference on every render, invalidating memos keyed on this below.
+  const shipTypeByMmsi = useMemo(() => shipTypesQuery.data ?? {}, [shipTypesQuery.data]);
 
   const addToWatchlistMutation = useMutation({
     mutationFn: ({ mmsi, watchlistId }: { mmsi: string; watchlistId: string }) =>
@@ -152,6 +167,15 @@ export function MapPage() {
       const next = new Set(prev);
       if (next.has(state)) next.delete(state);
       else next.add(state);
+      return next;
+    });
+  }
+
+  function toggleTypeFilter(type: string) {
+    setTypeFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
       return next;
     });
   }
@@ -188,8 +212,29 @@ export function MapPage() {
       result = filtered;
     }
 
+    if (typeFilter.size > 0) {
+      const filtered = new Map<string, LiveVessel>();
+      for (const [mmsi, vessel] of result) {
+        if (typeFilter.has(shipTypeByMmsi[mmsi])) filtered.set(mmsi, vessel);
+      }
+      result = filtered;
+    }
+
     return result;
-  }, [allVessels, freshnessFilter, watchlistOnly, watchlistDetail]);
+  }, [allVessels, freshnessFilter, watchlistOnly, watchlistDetail, typeFilter, shipTypeByMmsi]);
+
+  // Only the categories actually present among currently-known vessels --
+  // showing all ~20 possible AIS categories regardless of relevance would
+  // make for a much noisier filter row than the fixed 4-state freshness
+  // one above.
+  const typeOptions = useMemo(() => {
+    const seen = new Set<string>();
+    for (const mmsi of allVessels.keys()) {
+      const type = shipTypeByMmsi[mmsi];
+      if (type) seen.add(type);
+    }
+    return Array.from(seen).sort();
+  }, [allVessels, shipTypeByMmsi]);
 
   // Widen the viewport to include every watchlisted vessel's last known
   // position when a list is selected, so out-of-view members actually show
@@ -258,6 +303,9 @@ export function MapPage() {
           freshnessFilter={freshnessFilter}
           onToggleFreshnessFilter={toggleFreshnessFilter}
           watchlistedMmsis={watchlistedMmsis}
+          typeOptions={typeOptions}
+          typeFilter={typeFilter}
+          onToggleTypeFilter={toggleTypeFilter}
         />
 
         <WatchlistPanel

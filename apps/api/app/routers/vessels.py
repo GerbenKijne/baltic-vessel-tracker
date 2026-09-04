@@ -131,6 +131,22 @@ async def search_vessels(
 
 
 @router.get(
+    "/ship-types", response_model=dict[str, str], dependencies=[Depends(get_current_user)]
+)
+async def list_ship_types(db: AsyncSession = Depends(get_db)) -> dict[str, str]:
+    """mmsi -> category for every vessel whose type is known, so the map's
+    type filter can work against the live feed's vessels (which don't
+    carry identity fields themselves -- see docs/adr/0005) without a
+    per-vessel fetch. `vessels` rows are never pruned by retention, but
+    this is one row per vessel ever seen, not per observation, so a full
+    scan stays cheap at any realistic self-hosted scale."""
+    rows = (
+        await db.execute(select(Vessel.mmsi, Vessel.ship_type).where(Vessel.ship_type.is_not(None)))
+    ).all()
+    return {mmsi: ship_type for mmsi, ship_type in rows}
+
+
+@router.get(
     "/{mmsi}", response_model=VesselDetailOut, dependencies=[Depends(get_current_user)]
 )
 async def get_vessel_detail(mmsi: str, db: AsyncSession = Depends(get_db)) -> VesselDetailOut:

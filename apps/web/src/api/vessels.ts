@@ -31,4 +31,8 @@ export const vesselsApi = {
     return request<VesselSearchResult[]>(`/api/v1/vessels/search?${params.toString()}`);
   },
   getDetail: (mmsi: string) => request<VesselDetail>(`/api/v1/vessels/${mmsi}`),
+  // mmsi -> category, for every vessel whose type is known -- backs the
+  // map's type filter, which needs this for vessels the live feed itself
+  // doesn't carry identity fields for (see docs/adr/0005).
+  shipTypes: () => request<Record<string, string>>("/api/v1/vessels/ship-types"),
 };
