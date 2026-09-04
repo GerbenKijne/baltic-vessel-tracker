@@ -27,12 +27,18 @@ function wsUrl(): string {
   return `${protocol}//${window.location.host}/api/v1/live`;
 }
 
-function toLiveVessel(msg: Record<string, unknown>): LiveVessel | null {
+function toLiveVessel(msg: Record<string, unknown>, previous: LiveVessel | undefined): LiveVessel | null {
   const position = msg.position as { lon: number; lat: number } | null;
   if (!position) return null;
+  // A position-report vessel.upsert never carries a name (only the
+  // separate static-data message does, and that one never carries a
+  // position). Falling back to the previously known name -- from the
+  // initial snapshot or an earlier upsert that did carry one -- avoids
+  // permanently blanking it on the very next ordinary position update.
+  const name = (msg.name as string | null) ?? previous?.name ?? null;
   return {
     mmsi: msg.mmsi as string,
-    name: (msg.name as string | null) ?? null,
+    name,
     lon: position.lon,
     lat: position.lat,
     sogKn: (msg.sog_kn as number | null) ?? null,
@@ -71,14 +77,13 @@ export function useLiveVessels(bbox: Bbox): LiveState {
         if (msg.type === "snapshot.begin") {
           setVessels(new Map());
         } else if (msg.type === "vessel.snapshot" || msg.type === "vessel.upsert") {
-          const vessel = toLiveVessel(msg);
-          if (vessel) {
-            setVessels((prev) => {
-              const next = new Map(prev);
-              next.set(vessel.mmsi, vessel);
-              return next;
-            });
-          }
+          setVessels((prev) => {
+            const vessel = toLiveVessel(msg, prev.get(msg.mmsi as string));
+            if (!vessel) return prev;
+            const next = new Map(prev);
+            next.set(vessel.mmsi, vessel);
+            return next;
+          });
         }
       };
 

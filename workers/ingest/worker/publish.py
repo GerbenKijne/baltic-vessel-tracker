@@ -26,6 +26,14 @@ async def publish_vessel_upsert(redis: Redis, obs: CanonicalAisObservation) -> N
         "cog_deg": obs.cog_deg,
         "heading_deg": obs.heading_deg,
         "nav_status": obs.nav_status.value if obs.nav_status else None,
+        # Usually None here: for AIS Class A traffic a position report (the
+        # only message type that reaches this function, since publish is
+        # gated on a position being present) never carries a name -- only
+        # the separate, position-less ShipStaticData message does. Sent
+        # anyway for sources that bundle identity with position (e.g. the
+        # simulator). The frontend must not treat a missing/None name as
+        # "clear the previously known name" -- see useLiveVessels.
+        "name": obs.name,
         "observed_at": obs.observed_at.isoformat() if obs.observed_at else None,
         "received_at": obs.received_at.isoformat(),
         "source": obs.source.value,
