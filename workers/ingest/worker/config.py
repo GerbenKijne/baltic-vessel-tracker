@@ -1,7 +1,5 @@
-import json
 import os
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 # History: originally three small boxes for the PRD SS12.1 mandatory
 # capture spike (Stockholm, Gothenburg, Öresund/Copenhagen); then, on
@@ -24,6 +22,11 @@ from typing import Optional
 # sweep (worker/retention.py) keeps position_observations bounded
 # regardless, but message/row volume and AISStream bandwidth will be
 # much higher than the smaller regional boxes this replaces.
+#
+# Used as the fallback for an aisstream data source row that doesn't set
+# its own bounding_boxes (see worker/sources.py) -- no longer read from
+# an env var directly (that was AISSTREAM_BOUNDING_BOXES, now replaced by
+# the Admin "Data sources" page).
 DEFAULT_BOUNDING_BOXES: list[list[list[float]]] = [
     [[53.5, 9.0], [65.9, 30.5]],  # entire Baltic Sea
 ]
@@ -33,13 +36,8 @@ DEFAULT_BOUNDING_BOXES: list[list[list[float]]] = [
 class WorkerConfig:
     database_url: str
     redis_url: str
-    adapter: str
     instance_id: str
     heartbeat_interval_seconds: int
-    aisstream_api_key: Optional[str] = None
-    aisstream_bounding_boxes: list[list[list[float]]] = field(
-        default_factory=lambda: DEFAULT_BOUNDING_BOXES
-    )
     # Retention (user policy, 2026-09-03): a vessel nobody's watching only
     # needs a day of history; a watchlisted one keeps a full year, since
     # that's specifically what someone is tracking over time. Without
@@ -51,21 +49,13 @@ class WorkerConfig:
 
 
 def load_config() -> WorkerConfig:
-    bounding_boxes_raw = os.environ.get("AISSTREAM_BOUNDING_BOXES")
-    bounding_boxes = (
-        json.loads(bounding_boxes_raw) if bounding_boxes_raw else DEFAULT_BOUNDING_BOXES
-    )
-
     return WorkerConfig(
         database_url=os.environ.get(
             "DATABASE_URL", "postgresql+asyncpg://baltic:baltic@postgres:5432/baltic"
         ),
         redis_url=os.environ.get("REDIS_URL", "redis://redis:6379/0"),
-        adapter=os.environ.get("INGEST_ADAPTER", "simulator"),
         instance_id=os.environ.get("HOSTNAME", "worker-ingest-1"),
         heartbeat_interval_seconds=int(os.environ.get("SOURCE_HEARTBEAT_SECONDS", "15")),
-        aisstream_api_key=os.environ.get("AISSTREAM_API_KEY") or None,
-        aisstream_bounding_boxes=bounding_boxes,
         retention_default_hours=int(os.environ.get("RETENTION_DEFAULT_HOURS", "24")),
         retention_watchlisted_days=int(os.environ.get("RETENTION_WATCHLISTED_DAYS", "365")),
         retention_sweep_interval_seconds=int(

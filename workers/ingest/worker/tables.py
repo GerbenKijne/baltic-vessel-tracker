@@ -11,6 +11,7 @@ from __future__ import annotations
 from geoalchemy2 import Geography
 from sqlalchemy import (
     ARRAY,
+    Boolean,
     Column,
     DateTime,
     ForeignKey,
@@ -112,5 +113,21 @@ retention_settings = Table(
     Column("default_hours", Integer, nullable=False),
     Column("watchlisted_days", Integer, nullable=False),
     Column("sweep_interval_seconds", Integer, nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
+# Admin-configured ingest sources (Admin "Data sources" page) -- see
+# worker/sources.py, which reads every enabled row here at this worker's
+# own startup and runs one adapter per row.
+data_sources = Table(
+    "data_sources",
+    metadata,
+    Column("id", UUID, primary_key=True),
+    Column("name", String(120), nullable=False),
+    Column("adapter", String(30), nullable=False),
+    Column("api_key", Text, nullable=True),
+    Column("bounding_boxes", JSONB, nullable=True),
+    Column("enabled", Boolean, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )

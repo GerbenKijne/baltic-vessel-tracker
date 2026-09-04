@@ -17,6 +17,7 @@ from sqlalchemy import (
     ARRAY,
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
@@ -213,4 +214,33 @@ class RetentionSettings(Base):
     default_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
     watchlisted_days: Mapped[int] = mapped_column(Integer, nullable=False, default=365)
     sweep_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=3600)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DataSourceConfig(Base):
+    """Admin-configured ingest source (Admin "Data sources" page) --
+    replaces the old INGEST_ADAPTER/AISSTREAM_* env vars. The ingest
+    worker (workers/ingest/worker/sources.py) reads every enabled row
+    here at its own startup and runs one adapter per row; it also
+    watches this table for changes and restarts itself (docker-compose's
+    `restart: unless-stopped` brings it back up already reading the new
+    config) when a row is added, edited, enabled, or disabled -- so a
+    change here takes effect within one watch interval, not instantly,
+    and not without a brief ingestion gap while it restarts."""
+
+    __tablename__ = "data_sources"
+    __table_args__ = (
+        CheckConstraint("adapter IN ('simulator', 'aisstream')", name="ck_data_sources_adapter"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID, primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    adapter: Mapped[str] = mapped_column(String(30), nullable=False)
+    # Plaintext, same trust model as the .env file it replaces -- whoever
+    # can reach this database or the Admin UI already has full admin
+    # access to this single-operator app.
+    api_key: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    bounding_boxes: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -974,22 +974,30 @@ table.t .unk {
   padding: 6px 12px;
 }
 
-/* degradation banner */
+/* onboarding + degradation banners -- stacked in a shared positioned
+   wrapper (.map-banners) rather than each being independently
+   position:absolute, so showing both at once doesn't overlap them. */
 
-.map-banner {
+.map-banners {
   top: 10px;
   left: 12px;
   right: 372px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   border: 0;
   background: none;
   box-shadow: none;
   backdrop-filter: none;
+  pointer-events: none;
 }
 
 .map-banner .warnbar {
   margin: 0 auto;
   width: fit-content;
   max-width: 620px;
+  pointer-events: auto;
 }
 
 /* vessel drawer */

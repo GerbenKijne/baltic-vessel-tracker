@@ -18,7 +18,7 @@ export function DegradationBanner({ sources }: Props) {
   const since = worst.last_message_at ? `${formatAgeForTime(worst.last_message_at)} since last message.` : "No message received yet.";
 
   return (
-    <div className="float map-banner">
+    <div className="map-banner">
       <div className="warnbar">
         <strong>{sourceLabel(worst.source)} degraded</strong>
         <span style={{ opacity: 0.9 }}>{since} Coverage may be reduced.</span>

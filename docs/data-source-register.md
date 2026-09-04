@@ -37,10 +37,11 @@ enabling any real provider.
   operating at a scale where the absence of stated restrictions is a
   meaningful risk. Revisit if the project's scope or audience changes
   (e.g. multi-tenant, public, commercial).
-- **`INGEST_ADAPTER=aisstream` is cleared to enable** in this project's
-  own deployment, given the decision above — still don't default a
-  *shared/example* `.env` to it, since each deployer needs their own key
-  and should make their own call on the terms gap.
+- **Enabling an `aisstream` data source is cleared** for this project's
+  own deployment, given the decision above (added from Admin -> Data
+  sources, not an env var — see `docs/adr/0004-data-source-config.md`) —
+  still don't seed a *fresh install* with one, since each deployer needs
+  their own key and should make their own call on the terms gap.
 - Docs: https://aisstream.io/documentation
 - Operational limits confirmed from the docs (2026-09-02): 3 subscribed
   connections per account, 3 open connections per IP, 1 subscription

@@ -1,8 +1,18 @@
 # Ingestion worker
 
 Adapter -> parse -> normalize -> dedupe -> persist -> publish (PRD SS8.1).
-Set `INGEST_ADAPTER` to choose which adapter runs; only one runs per
-worker process/container.
+
+Which adapter(s) run is no longer an env var (`INGEST_ADAPTER` is gone) --
+it's the admin-editable `data_sources` table, managed from the app's
+Admin -> Data sources page. `run()` in `worker/main.py` reads every
+enabled row at its own startup (`worker/sources.py`) and runs one
+`_ingest_loop` per row concurrently, so zero, one, or several adapters
+(including two of the same type with different bounding boxes) can run
+at once. Adding, editing, enabling, or disabling a row takes effect once
+this worker notices the table changed and restarts itself (a background
+watcher checks every 20s) -- `restart: unless-stopped` then brings it
+back up already reading the new config. A fresh install seeds a single
+`simulator` row via migration `0005_data_sources`.
 
 This process also runs two periodic/inline jobs that aren't part of that
 pipeline but live here rather than as separate services (see
@@ -29,12 +39,12 @@ for local dev, demos, and CI. Source: `worker/adapters/simulator.py`.
 
 ## `aisstream`
 
-**Not enabled by default in a fresh clone's `.env.example`** — each
-deployer needs their own API key and should read
-`docs/data-source-register.md`'s terms-review note (AISStream has no
-published Terms of Service for the data itself, only a privacy policy
-covering their own site telemetry) and decide for themselves before
-setting `INGEST_ADAPTER=aisstream`. The PRD SS12.1 capture spike and that
+**Not enabled by default on a fresh install** — each deployer needs their
+own API key (added from Admin -> Data sources once the app is running)
+and should read `docs/data-source-register.md`'s terms-review note
+(AISStream has no published Terms of Service for the data itself, only a
+privacy policy covering their own site telemetry) and decide for
+themselves before enabling it. The PRD SS12.1 capture spike and that
 terms review are both done for *this* deployment — see
 `docs/data-source-register.md` for the actual results and reasoning.
 
@@ -42,7 +52,8 @@ terms review are both done for *this* deployment — see
 - Message schema: https://github.com/aisstream/ais-message-models
   (`type-definition.yaml` is the source of truth this adapter's parser
   was built against — re-check it if AISStream changes their schema)
-- Requires `AISSTREAM_API_KEY` (free signup at https://aisstream.io).
+- Requires an API key (free signup at https://aisstream.io), entered per
+  data source in Admin -> Data sources -- not an env var.
 - Parses Class A (`PositionReport`, `ShipStaticData`) and Class B
   (`StandardClassBPositionReport`, `ExtendedClassBPositionReport`,
   `StaticDataReport`) position/static messages (PRD SS12's "position/

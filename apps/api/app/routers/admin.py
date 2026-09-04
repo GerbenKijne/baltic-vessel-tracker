@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,8 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..deps import get_current_user, require_csrf
-from ..models import RetentionSettings, SourceStatus
+from ..models import DataSourceConfig, RetentionSettings, SourceStatus
 from ..schemas import (
+    DATA_SOURCE_ADAPTERS,
+    DataSourceCreate,
+    DataSourceOut,
+    DataSourceUpdate,
     RetentionSettingsOut,
     RetentionSettingsUpdate,
     SourceStatusOut,
@@ -34,8 +39,24 @@ _STORAGE_TABLES = [
     "alert_events",
     "notification_deliveries",
     "source_status",
+    "data_sources",
     "users",
 ]
+
+
+def _data_source_out(row: DataSourceConfig) -> DataSourceOut:
+    preview = f"••••{row.api_key[-4:]}" if row.api_key and len(row.api_key) >= 4 else None
+    return DataSourceOut(
+        id=str(row.id),
+        name=row.name,
+        adapter=row.adapter,
+        has_api_key=bool(row.api_key),
+        api_key_preview=preview,
+        bounding_boxes=row.bounding_boxes,
+        enabled=row.enabled,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
 
 
 @router.get(
@@ -170,3 +191,93 @@ async def get_storage_stats(db: AsyncSession = Depends(get_db)) -> StorageStatsO
             for name in _STORAGE_TABLES
         ],
     )
+
+
+def _validate_data_source_create(body: DataSourceCreate) -> None:
+    if body.adapter not in DATA_SOURCE_ADAPTERS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Unknown adapter {body.adapter!r}; must be one of {sorted(DATA_SOURCE_ADAPTERS)}",
+        )
+    if body.adapter == "aisstream" and not body.api_key:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "AISStream needs an API key -- get a free one at https://aisstream.io",
+        )
+
+
+@router.get(
+    "/data-sources",
+    response_model=list[DataSourceOut],
+    dependencies=[Depends(get_current_user)],
+)
+async def list_data_sources(db: AsyncSession = Depends(get_db)) -> list[DataSourceOut]:
+    rows = (
+        await db.execute(select(DataSourceConfig).order_by(DataSourceConfig.created_at))
+    ).scalars().all()
+    return [_data_source_out(row) for row in rows]
+
+
+@router.post(
+    "/data-sources",
+    response_model=DataSourceOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(get_current_user), Depends(require_csrf)],
+)
+async def create_data_source(
+    body: DataSourceCreate, db: AsyncSession = Depends(get_db)
+) -> DataSourceOut:
+    """Takes effect once the ingest worker notices this table changed and
+    restarts itself to pick it up (workers/ingest/worker/sources.py) --
+    within one watch interval, not instantly."""
+    _validate_data_source_create(body)
+    now = datetime.now(timezone.utc)
+    row = DataSourceConfig(
+        id=uuid.uuid4(),
+        name=body.name,
+        adapter=body.adapter,
+        api_key=body.api_key if body.adapter == "aisstream" else None,
+        bounding_boxes=body.bounding_boxes,
+        enabled=body.enabled,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(row)
+    await db.commit()
+    return _data_source_out(row)
+
+
+@router.patch(
+    "/data-sources/{source_id}",
+    response_model=DataSourceOut,
+    dependencies=[Depends(get_current_user), Depends(require_csrf)],
+)
+async def update_data_source(
+    source_id: uuid.UUID, body: DataSourceUpdate, db: AsyncSession = Depends(get_db)
+) -> DataSourceOut:
+    row = await db.get(DataSourceConfig, source_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Data source not found")
+    if body.name is not None:
+        row.name = body.name
+    if body.api_key is not None:
+        row.api_key = body.api_key
+    if body.bounding_boxes is not None:
+        row.bounding_boxes = body.bounding_boxes
+    if body.enabled is not None:
+        row.enabled = body.enabled
+    row.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return _data_source_out(row)
+
+
+@router.delete(
+    "/data-sources/{source_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(get_current_user), Depends(require_csrf)],
+)
+async def delete_data_source(source_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> None:
+    result = await db.execute(delete(DataSourceConfig).where(DataSourceConfig.id == source_id))
+    if result.rowcount == 0:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Data source not found")
+    await db.commit()

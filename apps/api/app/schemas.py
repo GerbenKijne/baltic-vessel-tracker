@@ -133,6 +133,36 @@ class RetentionSettingsUpdate(BaseModel):
     sweep_interval_seconds: int = Field(ge=60, le=86400)  # 1 min .. 1 day
 
 
+DATA_SOURCE_ADAPTERS = {"simulator", "aisstream"}
+
+
+class DataSourceCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    adapter: str
+    api_key: Optional[str] = Field(default=None, max_length=500)
+    bounding_boxes: Optional[list[list[list[float]]]] = None
+    enabled: bool = True
+
+
+class DataSourceUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    api_key: Optional[str] = Field(default=None, max_length=500)
+    bounding_boxes: Optional[list[list[list[float]]]] = None
+    enabled: Optional[bool] = None
+
+
+class DataSourceOut(BaseModel):
+    id: str
+    name: str
+    adapter: str
+    has_api_key: bool
+    api_key_preview: Optional[str]
+    bounding_boxes: Optional[list[list[list[float]]]]
+    enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 class TableStorageOut(BaseModel):
     name: str
     estimated_row_count: int

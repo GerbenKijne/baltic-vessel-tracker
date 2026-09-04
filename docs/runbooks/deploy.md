@@ -55,11 +55,13 @@ idempotent (it's a no-op if already at `head`).
 
 ## Switching adapters
 
-Set `INGEST_ADAPTER` in `.env` (`aisstream` is the only real one built —
-see `workers/ingest/README.md`). Do not switch away from `simulator`
-until docs/data-source-register.md's capture and terms review are
-complete for that source, and you've made your own call on the terms
-gap it documents.
+Add, edit, enable, or disable a data source from **Admin -> Data
+sources** in the running app — this is no longer a `.env` setting. The
+worker notices the change (checked every 20s) and restarts itself to
+apply it; no Compose command needed for this specific change. Do not
+enable `aisstream` until docs/data-source-register.md's capture and
+terms review are complete for that source, and you've made your own call
+on the terms gap it documents (see `workers/ingest/README.md`).
 
 **Always include `--env-file .env` on every Compose command**, including
 one-off single-service rebuilds. Without it, Compose silently falls back

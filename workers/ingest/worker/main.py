@@ -1,6 +1,7 @@
 """Ingestion worker entrypoint: adapter -> parse -> normalize -> dedupe ->
-persist -> publish (PRD SS8.1). Runs the full pipeline for whichever adapter
-is configured.
+persist -> publish (PRD SS8.1). Runs one full pipeline per enabled row in
+the admin-configured `data_sources` table (worker/sources.py) -- zero, one,
+or several adapters concurrently, not exactly one fixed by env vars.
 """
 from __future__ import annotations
 
@@ -12,11 +13,9 @@ from canonical import Source
 from redis.asyncio import Redis, from_url
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from .adapters.aisstream import AISStreamAdapter
 from .adapters.base import Adapter
-from .adapters.simulator import SimulatorAdapter
 from .alerts import alerts_loop, evaluate_position_alerts
-from .config import WorkerConfig, load_config
+from .config import load_config
 from .dedupe import is_duplicate
 from .normalize import IgnorableMessage, parse_and_normalize
 from .persistence import (
@@ -29,41 +28,25 @@ from .persistence import (
 )
 from .publish import publish_vessel_upsert
 from .retention import retention_loop
+from .sources import build_adapter, load_enabled_sources, sources_fingerprint, watch_for_changes
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def build_adapter(config: WorkerConfig) -> Adapter:
-    name = config.adapter
-    if name == "simulator":
-        return SimulatorAdapter()
-    if name == "aisstream":
-        if not config.aisstream_api_key:
-            raise ValueError(
-                "AISSTREAM_API_KEY is not set. Get a key at https://aisstream.io "
-                "and complete the review in docs/data-source-register.md before "
-                "enabling this adapter."
-            )
-        return AISStreamAdapter(
-            api_key=config.aisstream_api_key,
-            bounding_boxes=config.aisstream_bounding_boxes,
-        )
-    raise ValueError(
-        f"Unknown adapter {name!r}. See docs/data-source-register.md for "
-        "which adapters are actually ready to enable."
-    )
-
-
 async def _ingest_loop(
-    config: WorkerConfig, adapter: Adapter, engine: AsyncEngine, redis: Redis
+    instance: str,
+    heartbeat_interval_seconds: int,
+    adapter: Adapter,
+    engine: AsyncEngine,
+    redis: Redis,
 ) -> None:
     source = Source(adapter.source)
     message_count = 0
     error_count = 0
     last_heartbeat = datetime.now(timezone.utc)
 
-    logger.info("Starting ingest worker with adapter=%s", config.adapter)
+    logger.info("Starting ingest loop instance=%s adapter=%s", instance, source.value)
 
     async for raw in adapter.stream():
         received_at = datetime.now(timezone.utc)
@@ -115,12 +98,12 @@ async def _ingest_loop(
                 await publish_vessel_upsert(redis, obs)
 
         now = datetime.now(timezone.utc)
-        if (now - last_heartbeat).total_seconds() >= config.heartbeat_interval_seconds:
+        if (now - last_heartbeat).total_seconds() >= heartbeat_interval_seconds:
             async with engine.begin() as conn:
                 await record_source_heartbeat(
                     conn,
                     source.value,
-                    config.instance_id,
+                    instance,
                     "connected",
                     now,
                     message_count,
@@ -131,16 +114,42 @@ async def _ingest_loop(
 
 async def run() -> None:
     config = load_config()
-    adapter = build_adapter(config)
     engine = create_async_engine(config.database_url, pool_pre_ping=True)
     redis = from_url(config.redis_url)
 
-    # Run alongside the ingest loop for the lifetime of the process --
+    enabled_sources = await load_enabled_sources(engine)
+    if not enabled_sources:
+        logger.warning(
+            "No enabled data sources configured -- ingestion is idle. "
+            "Add one from Admin → Data sources."
+        )
+    # Captured before building any adapters so a config change made while
+    # this worker is still starting up (e.g. during a slow AISStream
+    # connect) isn't missed by watch_for_changes below.
+    startup_fingerprint = await sources_fingerprint(engine)
+
+    ingest_tasks = []
+    for source in enabled_sources:
+        try:
+            adapter = build_adapter(source)
+        except Exception:  # noqa: BLE001 - one bad source must not block the others
+            logger.exception("Failed to start data source %r; skipping it", source.name)
+            continue
+        # Distinct per configured source (not just per adapter type), so
+        # e.g. two aisstream rows with different bounding boxes get their
+        # own source_status row instead of colliding on the same PK.
+        instance = f"{config.instance_id}:{source.id[:8]}"
+        ingest_tasks.append(
+            _ingest_loop(instance, config.heartbeat_interval_seconds, adapter, engine, redis)
+        )
+
+    # Run alongside the ingest loop(s) for the lifetime of the process --
     # one already-continuous worker, no separate cron/service needed.
     await asyncio.gather(
-        _ingest_loop(config, adapter, engine, redis),
+        *ingest_tasks,
         retention_loop(engine, config),
         alerts_loop(engine),
+        watch_for_changes(engine, startup_fingerprint),
     )
 
 

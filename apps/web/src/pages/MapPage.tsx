@@ -9,6 +9,7 @@ import { useTheme } from "../ThemeContext";
 import { DegradationBanner } from "../components/DegradationBanner";
 import { LegendPanel } from "../components/LegendPanel";
 import { MapView } from "../components/MapView";
+import { OnboardingBanner } from "../components/OnboardingBanner";
 import { SearchPanel } from "../components/SearchPanel";
 import { SourcePanel } from "../components/SourcePanel";
 import { VesselDrawer } from "../components/VesselDrawer";
@@ -169,7 +170,10 @@ export function MapPage() {
       </button>
 
       <div className={`map-panel-stack${panelsOpen ? " open" : ""}`}>
-        <DegradationBanner sources={sourcesQuery.data ?? []} />
+        <div className="float map-banners">
+          <OnboardingBanner />
+          <DegradationBanner sources={sourcesQuery.data ?? []} />
+        </div>
 
         {!connected && (
           <div className="float map-reconnecting-banner">
