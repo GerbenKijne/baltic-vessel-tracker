@@ -28,6 +28,7 @@ interface Props {
   vessel: LiveVessel;
   onClose: () => void;
   onShowHistory: (mmsi: string) => void;
+  isWatchlisted: boolean;
   watchlists: Watchlist[];
   onAddToWatchlist: (mmsi: string, watchlistId: string) => Promise<void>;
   onCreateWatchlistAndAdd: (mmsi: string, name: string) => Promise<void>;
@@ -37,6 +38,7 @@ export function VesselDrawer({
   vessel,
   onClose,
   onShowHistory,
+  isWatchlisted,
   watchlists,
   onAddToWatchlist,
   onCreateWatchlistAndAdd,
@@ -86,6 +88,11 @@ export function VesselDrawer({
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="eyebrow">Vessel</div>
             <div style={{ fontSize: 17, fontWeight: 600, margin: "2px 0 4px" }}>
+              {isWatchlisted && (
+                <span style={{ color: "var(--delayed)" }} aria-label="On a watchlist">
+                  ★{" "}
+                </span>
+              )}
               {vessel.name ?? "Unknown"}
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>

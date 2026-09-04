@@ -113,6 +113,14 @@ export function HistoryPage() {
     queryFn: () => vesselsApi.search(debouncedQuery),
     enabled: debouncedQuery.trim().length > 0,
   });
+  const memberMmsisQuery = useQuery({
+    queryKey: ["watchlists", "member-mmsis"],
+    queryFn: watchlistsApi.memberMmsis,
+  });
+  const watchlistedMmsis = useMemo(
+    () => new Set(memberMmsisQuery.data ?? []),
+    [memberMmsisQuery.data]
+  );
 
   const { from, to } = useMemo(() => {
     if (windowMode === "24h") return { from: new Date(Date.now() - 24 * 3600 * 1000), to: new Date() };
@@ -273,7 +281,14 @@ export function HistoryPage() {
                       disabled={already}
                       onClick={() => handleSelectVessel(v)}
                     >
-                      <span style={{ fontSize: 12 }}>{v.name ?? "Unknown"}</span>
+                      <span style={{ fontSize: 12 }}>
+                        {watchlistedMmsis.has(v.mmsi) && (
+                          <span style={{ color: "var(--delayed)" }} aria-label="On a watchlist">
+                            ★{" "}
+                          </span>
+                        )}
+                        {v.name ?? "Unknown"}
+                      </span>
                       <span className="n mono">{already ? "Added" : v.mmsi}</span>
                     </button>
                   );
@@ -310,6 +325,11 @@ export function HistoryPage() {
                         whiteSpace: "nowrap",
                       }}
                     >
+                      {watchlistedMmsis.has(v.mmsi) && (
+                        <span style={{ color: "var(--delayed)" }} aria-label="On a watchlist">
+                          ★{" "}
+                        </span>
+                      )}
                       {v.name ?? "Unknown"}
                     </div>
                     <div className="mono" style={{ fontSize: 11, color: "var(--faint)" }}>

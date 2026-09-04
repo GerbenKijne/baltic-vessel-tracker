@@ -57,7 +57,8 @@ function shapeFor(vessel: LiveVessel): MarkerShape {
 function vesselsToGeoJson(
   vessels: Map<string, LiveVessel>,
   selectedMmsi: string | null,
-  highlightMmsis: Set<string> | null
+  highlightMmsis: Set<string> | null,
+  watchlistedMmsis: Set<string>
 ): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
@@ -76,6 +77,7 @@ function vesselsToGeoJson(
           freshness,
           isSelected: vessel.mmsi === selectedMmsi,
           isDimmed: highlightMmsis != null && !highlightMmsis.has(vessel.mmsi),
+          isWatchlisted: watchlistedMmsis.has(vessel.mmsi),
         },
       };
     }),
@@ -102,6 +104,10 @@ interface Props {
   // When set, vessels NOT in this set render dimmed -- lets "show all
   // vessels" still make a watchlist's members visually stand out.
   highlightMmsis: Set<string> | null;
+  // Every vessel on ANY of the user's watchlists, regardless of which
+  // one (if any) is currently selected -- marks the name label with a
+  // star so "is this one already on a list" is visible at a glance.
+  watchlistedMmsis: Set<string>;
 }
 
 export function MapView({
@@ -114,6 +120,7 @@ export function MapView({
   initialCenter,
   initialZoom,
   highlightMmsis,
+  watchlistedMmsis,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
@@ -285,7 +292,12 @@ export function MapView({
         filter: NOT_CLUSTER_FILTER,
         minzoom: 0,
         layout: {
-          "text-field": ["get", "name"],
+          "text-field": [
+            "case",
+            ["get", "isWatchlisted"],
+            ["concat", "★ ", ["get", "name"]],
+            ["get", "name"],
+          ],
           "text-font": ["Noto Sans Regular"],
           "text-size": 10,
           "text-offset": [0.9, -0.6],
@@ -370,7 +382,7 @@ export function MapView({
   useEffect(() => {
     const map = mapRef.current;
     const source = map?.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
-    source?.setData(vesselsToGeoJson(vessels, selectedMmsi, highlightMmsis));
+    source?.setData(vesselsToGeoJson(vessels, selectedMmsi, highlightMmsis, watchlistedMmsis));
 
     const selectionSource = map?.getSource(SELECTION_SOURCE_ID) as
       | maplibregl.GeoJSONSource
@@ -388,7 +400,7 @@ export function MapView({
           ]
         : [],
     });
-  }, [vessels, selectedMmsi, highlightMmsis]);
+  }, [vessels, selectedMmsi, highlightMmsis, watchlistedMmsis]);
 
   useEffect(() => {
     if (focusBounds) {

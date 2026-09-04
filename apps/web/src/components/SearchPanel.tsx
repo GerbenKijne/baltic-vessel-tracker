@@ -17,9 +17,16 @@ interface Props {
   onSelectVessel: (mmsi: string) => void;
   freshnessFilter: Set<FreshnessState>;
   onToggleFreshnessFilter: (state: FreshnessState) => void;
+  watchlistedMmsis: Set<string>;
 }
 
-export function SearchPanel({ vessels, onSelectVessel, freshnessFilter, onToggleFreshnessFilter }: Props) {
+export function SearchPanel({
+  vessels,
+  onSelectVessel,
+  freshnessFilter,
+  onToggleFreshnessFilter,
+  watchlistedMmsis,
+}: Props) {
   const [query, setQuery] = useState("");
 
   const results = useMemo(() => {
@@ -51,7 +58,14 @@ export function SearchPanel({ vessels, onSelectVessel, freshnessFilter, onToggle
                   setQuery("");
                 }}
               >
-                <span className="name">{v.name ?? "Unknown"}</span>
+                <span className="name">
+                  {watchlistedMmsis.has(v.mmsi) && (
+                    <span style={{ color: "var(--delayed)" }} aria-label="On a watchlist">
+                      ★{" "}
+                    </span>
+                  )}
+                  {v.name ?? "Unknown"}
+                </span>
                 <span className="mono sub" style={{ marginLeft: 6 }}>
                   {v.mmsi}
                 </span>

@@ -82,6 +82,25 @@ async def create_watchlist(
     )
 
 
+@router.get("/member-mmsis", response_model=list[str], dependencies=[Depends(get_current_user)])
+async def list_member_mmsis(
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
+) -> list[str]:
+    """Every vessel on any of this user's watchlists, regardless of which
+    one -- backs the "already on a list" star shown in search results
+    and on the map, which isn't tied to whichever single list happens to
+    be selected there."""
+    rows = (
+        await db.execute(
+            select(WatchlistVessel.mmsi)
+            .join(Watchlist, Watchlist.id == WatchlistVessel.watchlist_id)
+            .where(Watchlist.user_id == current_user.id)
+            .distinct()
+        )
+    ).scalars()
+    return list(rows)
+
+
 @router.get("/{watchlist_id}", response_model=WatchlistDetailOut)
 async def get_watchlist(
     watchlist_id: str,

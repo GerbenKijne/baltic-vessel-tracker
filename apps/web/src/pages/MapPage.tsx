@@ -110,6 +110,14 @@ export function MapPage() {
     queryFn: () => watchlistsApi.get(selectedWatchlistId!),
     enabled: selectedWatchlistId !== null,
   });
+  const memberMmsisQuery = useQuery({
+    queryKey: ["watchlists", "member-mmsis"],
+    queryFn: watchlistsApi.memberMmsis,
+  });
+  const watchlistedMmsis = useMemo(
+    () => new Set(memberMmsisQuery.data ?? []),
+    [memberMmsisQuery.data]
+  );
   const sourcesQuery = useQuery({
     queryKey: ["sources"],
     queryFn: sourcesApi.list,
@@ -217,6 +225,7 @@ export function MapPage() {
         initialCenter={remembered?.center}
         initialZoom={remembered?.zoom}
         highlightMmsis={highlightMmsis}
+        watchlistedMmsis={watchlistedMmsis}
       />
 
       <button
@@ -248,6 +257,7 @@ export function MapPage() {
           onSelectVessel={handleSelectVessel}
           freshnessFilter={freshnessFilter}
           onToggleFreshnessFilter={toggleFreshnessFilter}
+          watchlistedMmsis={watchlistedMmsis}
         />
 
         <WatchlistPanel
@@ -271,6 +281,7 @@ export function MapPage() {
           vessel={selectedVessel}
           onClose={() => setSelectedMmsi(null)}
           onShowHistory={(mmsi) => navigate(`/history?mmsi=${mmsi}`)}
+          isWatchlisted={watchlistedMmsis.has(selectedVessel.mmsi)}
           watchlists={watchlistsQuery.data ?? []}
           onAddToWatchlist={handleAddToWatchlist}
           onCreateWatchlistAndAdd={handleCreateWatchlistAndAdd}

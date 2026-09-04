@@ -36,6 +36,12 @@ export interface WatchlistDetail {
 
 export const watchlistsApi = {
   list: () => request<Watchlist[]>("/api/v1/watchlists"),
+  // Every vessel on any of this user's watchlists, regardless of which
+  // one -- backs the "already on a list" star shown in search results
+  // and on the map. Keyed as ["watchlists", "member-mmsis"] wherever
+  // it's queried, so it's automatically invalidated by every existing
+  // add/remove/import mutation's broader ["watchlists"] invalidation.
+  memberMmsis: () => request<string[]>("/api/v1/watchlists/member-mmsis"),
   create: (name: string) =>
     request<Watchlist>("/api/v1/watchlists", { method: "POST", body: JSON.stringify({ name }) }),
   get: (id: string) => request<WatchlistDetail>(`/api/v1/watchlists/${id}`),
