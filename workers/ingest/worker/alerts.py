@@ -6,6 +6,11 @@ one). "Accepted" matters: this only runs after a message has passed
 parsing, dedup, and persistence, matching the design handoff's own
 principle that a rejected or duplicate observation never fires a rule.
 
+A rule can optionally also auto-add the vessel to a watchlist
+(alert_rules.add_to_watchlist_id) the first time it genuinely fires --
+not on a replayed/duplicate transition -- letting a geofence or other
+rule curate a list automatically (see _fire/_add_to_watchlist).
+
 Written against raw SQL rather than the Core-table-mirror pattern the
 rest of this worker uses for vessels/positions/etc: the JSONB target/
 params matching and PostGIS containment checks read more clearly as
@@ -39,7 +44,7 @@ async def _matching_rules(
         await conn.execute(
             text(
                 """
-                SELECT id, type, params, cooldown_seconds
+                SELECT id, name, type, params, cooldown_seconds, add_to_watchlist_id
                 FROM alert_rules
                 WHERE enabled = true
                   AND type = ANY(:types)
@@ -93,10 +98,37 @@ async def _within_cooldown(
     return elapsed < cooldown_seconds
 
 
-async def _fire(
-    conn: AsyncConnection, rule_id: str, mmsi: str, transition_key: str, context: dict[str, Any]
+async def _add_to_watchlist(
+    conn: AsyncConnection, watchlist_id: str, mmsi: str, rule_name: str
 ) -> None:
     await conn.execute(
+        text(
+            """
+            INSERT INTO watchlist_vessels (id, watchlist_id, mmsi, added_at, note)
+            VALUES (:id, :watchlist_id, :mmsi, :added_at, :note)
+            ON CONFLICT (watchlist_id, mmsi) DO NOTHING
+            """
+        ),
+        {
+            "id": str(uuid.uuid4()),
+            "watchlist_id": watchlist_id,
+            "mmsi": mmsi,
+            "added_at": datetime.now(timezone.utc),
+            "note": f'Auto-added by alert rule "{rule_name}"',
+        },
+    )
+
+
+async def _fire(
+    conn: AsyncConnection,
+    rule_id: str,
+    mmsi: str,
+    transition_key: str,
+    context: dict[str, Any],
+    rule_name: str = "",
+    add_to_watchlist_id: Optional[str] = None,
+) -> None:
+    result = await conn.execute(
         text(
             """
             INSERT INTO alert_events (id, rule_id, mmsi, transition_key, occurred_at, context)
@@ -113,7 +145,13 @@ async def _fire(
             "context": json.dumps(context),
         },
     )
+    if result.rowcount == 0:
+        # A replay of the same transition (ON CONFLICT DO NOTHING above) --
+        # already handled the first time it fired, including any auto-add.
+        return
     logger.info("Alert fired: rule=%s mmsi=%s %s", rule_id, mmsi, context)
+    if add_to_watchlist_id:
+        await _add_to_watchlist(conn, add_to_watchlist_id, mmsi, rule_name)
 
 
 async def evaluate_position_alerts(
@@ -139,6 +177,7 @@ async def evaluate_position_alerts(
             await _fire(
                 conn, rule_id, mmsi, f"{rule_id}:{mmsi}:speed:{bucket}",
                 {"sog_kn": sog_kn, "threshold_kn": threshold},
+                rule_name=rule.name, add_to_watchlist_id=rule.add_to_watchlist_id,
             )
             continue
 
@@ -162,6 +201,7 @@ async def evaluate_position_alerts(
         await _fire(
             conn, rule_id, mmsi, f"{rule_id}:{mmsi}:{rule.type}:{bucket}",
             {"lon": lon, "lat": lat, "geofence_id": geofence_id},
+            rule_name=rule.name, add_to_watchlist_id=rule.add_to_watchlist_id,
         )
 
 
@@ -170,8 +210,8 @@ async def evaluate_stale_alerts(engine: AsyncEngine) -> None:
         rules = (
             await conn.execute(
                 text(
-                    "SELECT id, target, params, cooldown_seconds FROM alert_rules "
-                    "WHERE enabled = true AND type = 'stale'"
+                    "SELECT id, name, target, params, cooldown_seconds, add_to_watchlist_id "
+                    "FROM alert_rules WHERE enabled = true AND type = 'stale'"
                 )
             )
         ).all()
@@ -221,6 +261,7 @@ async def evaluate_stale_alerts(engine: AsyncEngine) -> None:
                 await _fire(
                     conn, rule_id, row.mmsi, f"{rule_id}:{row.mmsi}:stale:{bucket}",
                     {"minutes_threshold": minutes},
+                    rule_name=rule.name, add_to_watchlist_id=rule.add_to_watchlist_id,
                 )
 
 

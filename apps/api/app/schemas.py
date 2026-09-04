@@ -224,6 +224,7 @@ class AlertRuleCreate(BaseModel):
     params: dict = Field(default_factory=dict)
     cooldown_seconds: int = Field(default=1800, ge=60, le=86400)
     enabled: bool = True
+    add_to_watchlist_id: Optional[str] = None
 
 
 class AlertRuleUpdate(BaseModel):
@@ -233,6 +234,10 @@ class AlertRuleUpdate(BaseModel):
     params: Optional[dict] = None
     cooldown_seconds: Optional[int] = Field(default=None, ge=60, le=86400)
     enabled: Optional[bool] = None
+    # Always sent by the frontend (never omitted) alongside target/params,
+    # so unlike name/cooldown_seconds/enabled this is not a "None means
+    # leave unchanged" field -- None here means "clear the action".
+    add_to_watchlist_id: Optional[str] = None
 
 
 class AlertRuleOut(BaseModel):
@@ -243,6 +248,7 @@ class AlertRuleOut(BaseModel):
     params: dict
     cooldown_seconds: int
     enabled: bool
+    add_to_watchlist_id: Optional[str]
     event_count: int
 
 

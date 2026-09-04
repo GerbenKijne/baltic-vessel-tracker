@@ -11,7 +11,7 @@ import {
   type AlertTargetKind,
 } from "../api/alertRules";
 import { geofencesApi } from "../api/geofences";
-import { watchlistsApi } from "../api/watchlists";
+import { watchlistsApi, type Watchlist } from "../api/watchlists";
 import { GeofenceMapView } from "../components/GeofenceMapView";
 import { TopBar } from "../components/TopBar";
 import { formatAgeForTime } from "../freshness";
@@ -49,6 +49,7 @@ interface RuleFormState {
   speedThresholdKn: string;
   cooldownMinutes: string;
   enabled: boolean;
+  addToWatchlistId: string;
 }
 
 const EMPTY_FORM: RuleFormState = {
@@ -62,6 +63,7 @@ const EMPTY_FORM: RuleFormState = {
   speedThresholdKn: "20",
   cooldownMinutes: "30",
   enabled: true,
+  addToWatchlistId: "",
 };
 
 function ruleToForm(rule: AlertRule): RuleFormState {
@@ -76,17 +78,21 @@ function ruleToForm(rule: AlertRule): RuleFormState {
     speedThresholdKn: String(rule.params.threshold_kn ?? "20"),
     cooldownMinutes: String(Math.round(rule.cooldown_seconds / 60)),
     enabled: rule.enabled,
+    addToWatchlistId: rule.add_to_watchlist_id ?? "",
   };
 }
 
-function describeRule(rule: AlertRule): string {
+function describeRule(rule: AlertRule, watchlists: Watchlist[]): string {
   const target =
     rule.target.kind === "all"
       ? "all vessels"
       : rule.target.kind === "vessel"
         ? `MMSI ${rule.target.mmsi}`
         : "a watchlist";
-  return `${RULE_TYPE_SHORT[rule.type].toLowerCase()} · ${target}`;
+  const base = `${RULE_TYPE_SHORT[rule.type].toLowerCase()} · ${target}`;
+  if (!rule.add_to_watchlist_id) return base;
+  const list = watchlists.find((w) => w.id === rule.add_to_watchlist_id);
+  return `${base} · ★ adds to ${list?.name ?? "a list"}`;
 }
 
 export function AlertsPage() {
@@ -251,6 +257,7 @@ export function AlertsPage() {
       params,
       cooldown_seconds: Math.round(cooldownMinutes * 60),
       enabled: form.enabled,
+      add_to_watchlist_id: form.addToWatchlistId || null,
     };
   }
 
@@ -326,7 +333,7 @@ export function AlertsPage() {
                 <span>
                   <span style={{ fontSize: 12 }}>{rule.name}</span>
                   <br />
-                  <span className="sub">{describeRule(rule)}</span>
+                  <span className="sub">{describeRule(rule, watchlists)}</span>
                 </span>
                 <span className="n">{rule.event_count}</span>
               </button>
@@ -722,6 +729,33 @@ export function AlertsPage() {
               </span>
               <div style={{ color: "var(--faint)", fontSize: 10.5, marginTop: 6 }}>
                 At most one notification per rule/vessel within this window.
+              </div>
+            </div>
+
+            <div className="fld">
+              <label
+                className="eyebrow"
+                htmlFor="raddtolist"
+                style={{ display: "block", marginBottom: 5 }}
+              >
+                Also add to a list
+              </label>
+              <select
+                id="raddtolist"
+                className="input"
+                value={form.addToWatchlistId}
+                onChange={(e) => setForm((f) => ({ ...f, addToWatchlistId: e.target.value }))}
+              >
+                <option value="">Don't add anywhere — just alert</option>
+                {watchlists.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+              <div style={{ color: "var(--faint)", fontSize: 10.5, marginTop: 6 }}>
+                Every vessel this rule fires for gets added here too — a way to auto-curate a list
+                from a geofence or other rule.
               </div>
             </div>
 

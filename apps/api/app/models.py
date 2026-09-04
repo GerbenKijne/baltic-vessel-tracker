@@ -156,6 +156,13 @@ class AlertRule(Base):
     params: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     cooldown_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=900)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # When set, a newly-fired (non-duplicate) event for this rule also
+    # adds the vessel to this watchlist -- e.g. auto-curate a list from a
+    # geofence_enter rule. ON DELETE SET NULL: deleting the target
+    # watchlist just turns this back into a plain alert.
+    add_to_watchlist_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PGUUID, ForeignKey("watchlists.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class AlertEvent(Base):

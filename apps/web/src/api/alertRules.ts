@@ -17,6 +17,10 @@ export interface AlertRule {
   params: Record<string, number | string>;
   cooldown_seconds: number;
   enabled: boolean;
+  // When set, a newly-fired (non-duplicate) event for this rule also
+  // adds the vessel to this watchlist -- lets a geofence (or any other)
+  // rule auto-curate a list.
+  add_to_watchlist_id: string | null;
   event_count: number;
 }
 
@@ -27,6 +31,7 @@ export interface AlertRuleWrite {
   params: Record<string, number | string>;
   cooldown_seconds: number;
   enabled: boolean;
+  add_to_watchlist_id: string | null;
 }
 
 export const alertRulesApi = {

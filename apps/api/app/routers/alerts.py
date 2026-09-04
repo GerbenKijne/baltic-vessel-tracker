@@ -65,6 +65,19 @@ async def _validate_target(db: AsyncSession, target: dict, user: User) -> None:
             )
 
 
+async def _validate_add_to_watchlist(
+    db: AsyncSession, add_to_watchlist_id: Optional[str], user: User
+) -> None:
+    if not add_to_watchlist_id:
+        return
+    parsed_id = _parse_id(add_to_watchlist_id, "add_to_watchlist_id is invalid")
+    watchlist = await db.get(Watchlist, parsed_id)
+    if watchlist is None or watchlist.user_id != user.id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "add_to_watchlist_id is not a known watchlist"
+        )
+
+
 async def _validate_params(db: AsyncSession, rule_type: str, params: dict, user: User) -> None:
     if rule_type in ("geofence_enter", "geofence_exit"):
         await _get_owned_geofence(db, str(params.get("geofence_id", "")), user)
@@ -191,6 +204,7 @@ async def list_alert_rules(
             params=rule.params,
             cooldown_seconds=rule.cooldown_seconds,
             enabled=rule.enabled,
+            add_to_watchlist_id=str(rule.add_to_watchlist_id) if rule.add_to_watchlist_id else None,
             event_count=count,
         )
         for rule, count in rows
@@ -214,6 +228,7 @@ async def create_alert_rule(
         )
     await _validate_target(db, body.target, user)
     await _validate_params(db, body.type, body.params, user)
+    await _validate_add_to_watchlist(db, body.add_to_watchlist_id, user)
 
     rule = AlertRule(
         id=uuid.uuid4(),
@@ -224,6 +239,10 @@ async def create_alert_rule(
         params=body.params,
         cooldown_seconds=body.cooldown_seconds,
         enabled=body.enabled,
+        # Already confirmed valid and owned by _validate_add_to_watchlist above.
+        add_to_watchlist_id=(
+            uuid.UUID(body.add_to_watchlist_id) if body.add_to_watchlist_id else None
+        ),
     )
     db.add(rule)
     await db.commit()
@@ -235,6 +254,7 @@ async def create_alert_rule(
         params=rule.params,
         cooldown_seconds=rule.cooldown_seconds,
         enabled=rule.enabled,
+        add_to_watchlist_id=body.add_to_watchlist_id,
         event_count=0,
     )
 
@@ -263,12 +283,20 @@ async def update_alert_rule(
         await _validate_target(db, new_target, user)
     if body.type is not None or body.params is not None:
         await _validate_params(db, new_type, new_params, user)
+    await _validate_add_to_watchlist(db, body.add_to_watchlist_id, user)
 
     if body.name is not None:
         rule.name = body.name
     rule.type = new_type
     rule.target = new_target
     rule.params = new_params
+    # Always overwritten (like target/params above), not gated on
+    # "is not None" -- the frontend always sends this alongside them, and
+    # unlike cooldown_seconds/enabled, None here is a real, meaningful
+    # value ("no auto-add action"), not "leave unchanged".
+    rule.add_to_watchlist_id = (
+        uuid.UUID(body.add_to_watchlist_id) if body.add_to_watchlist_id else None
+    )
     if body.cooldown_seconds is not None:
         rule.cooldown_seconds = body.cooldown_seconds
     if body.enabled is not None:
@@ -286,6 +314,7 @@ async def update_alert_rule(
         params=rule.params,
         cooldown_seconds=rule.cooldown_seconds,
         enabled=rule.enabled,
+        add_to_watchlist_id=str(rule.add_to_watchlist_id) if rule.add_to_watchlist_id else None,
         event_count=event_count or 0,
     )
 
