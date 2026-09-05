@@ -121,7 +121,7 @@ export function AlertsPage() {
   const geofencesQuery = useQuery({ queryKey: ["geofences"], queryFn: geofencesApi.list });
   const watchlistsQuery = useQuery({ queryKey: ["watchlists"], queryFn: watchlistsApi.list });
 
-  const [eventsFilter, setEventsFilter] = useState<"all" | "unacknowledged">("all");
+  const [eventsFilter, setEventsFilter] = useState<"all" | "unacknowledged">("unacknowledged");
   const eventsQuery = useQuery({
     queryKey: ["alert-events", eventsFilter],
     queryFn: () => alertEventsApi.list(eventsFilter === "unacknowledged" ? false : undefined),
@@ -194,6 +194,10 @@ export function AlertsPage() {
   });
   const acknowledgeMutation = useMutation({
     mutationFn: alertEventsApi.acknowledge,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["alert-events"] }),
+  });
+  const acknowledgeAllMutation = useMutation({
+    mutationFn: alertEventsApi.acknowledgeAll,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["alert-events"] }),
   });
 
@@ -467,6 +471,16 @@ export function AlertsPage() {
                 Unacknowledged
               </button>
             </div>
+            <div style={{ flex: 1 }} />
+            <button
+              className="btn sm"
+              disabled={unacknowledgedCount === 0 || acknowledgeAllMutation.isPending}
+              onClick={() => acknowledgeAllMutation.mutate()}
+            >
+              {acknowledgeAllMutation.isPending
+                ? "Acknowledging…"
+                : `Acknowledge all${unacknowledgedCount > 0 ? ` (${unacknowledgedCount})` : ""}`}
+            </button>
           </div>
 
           <div className="wrap" style={{ flex: 1, overflow: "auto" }}>

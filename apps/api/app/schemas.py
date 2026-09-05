@@ -262,3 +262,7 @@ class AlertEventOut(BaseModel):
     occurred_at: datetime
     context: dict
     acknowledged_at: Optional[datetime]
+
+
+class AcknowledgeAllOut(BaseModel):
+    acknowledged: int

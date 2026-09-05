@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from geoalchemy2.elements import WKTElement
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
@@ -14,6 +14,7 @@ from ..models import AlertEvent, AlertRule, Geofence, User, Vessel, Watchlist
 from ..schemas import (
     ALERT_RULE_TYPES,
     ALERT_TARGET_KINDS,
+    AcknowledgeAllOut,
     AlertEventOut,
     AlertRuleCreate,
     AlertRuleOut,
@@ -390,6 +391,26 @@ async def list_alert_events(
         )
         for event, rule_name, rule_type, vessel_name in rows
     ]
+
+
+@router.post(
+    "/alert-events/acknowledge-all",
+    response_model=AcknowledgeAllOut,
+    dependencies=[Depends(require_csrf)],
+)
+async def acknowledge_all_alert_events(
+    db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+) -> AcknowledgeAllOut:
+    """Marks every currently-unacknowledged event for this user's rules as
+    acknowledged in one action -- backs the inbox's "Acknowledge all"."""
+    owned_rule_ids = select(AlertRule.id).where(AlertRule.user_id == user.id)
+    result = await db.execute(
+        update(AlertEvent)
+        .where(AlertEvent.rule_id.in_(owned_rule_ids), AlertEvent.acknowledged_at.is_(None))
+        .values(acknowledged_at=datetime.now(timezone.utc))
+    )
+    await db.commit()
+    return AcknowledgeAllOut(acknowledged=result.rowcount)
 
 
 @router.post(

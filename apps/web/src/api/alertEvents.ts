@@ -19,4 +19,8 @@ export const alertEventsApi = {
   },
   acknowledge: (id: string) =>
     request<AlertEvent>(`/api/v1/alert-events/${id}/acknowledge`, { method: "POST" }),
+  acknowledgeAll: () =>
+    request<{ acknowledged: number }>("/api/v1/alert-events/acknowledge-all", {
+      method: "POST",
+    }),
 };
