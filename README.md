@@ -33,11 +33,13 @@ to its users (see the LICENSE file for the exact terms).
 - **Alerts**: geofences (circles — draw on the map or enter coordinates,
   your choice) and rules (enter/exit/stale/speed-above), each with a
   cooldown and a target (all vessels / one vessel / a watchlist), firing
-  into an in-app event inbox with acknowledgment. A rule can also
-  auto-add every vessel it fires for to a watchlist — e.g. a
-  geofence_enter rule curates a "ships that visited this port" list with
-  no manual add-to-list step. Email/webhook delivery and freeform
-  polygon geofences aren't built.
+  into an in-app event inbox with acknowledgment. A geofence rule can
+  stack an optional speed condition and a speed rule can stack an
+  optional geofence condition — e.g. "over 20kn inside this zone," not
+  just either alone. A rule can also auto-add every vessel it fires for
+  to a watchlist — e.g. a geofence_enter rule curates a "ships that
+  visited this port" list with no manual add-to-list step. Email/webhook
+  delivery and freeform polygon geofences aren't built.
 - **Admin**: add/edit/enable/disable data sources (Admin -> Data sources
   — no env vars or restart-by-hand needed), per-adapter-instance source
   health (message/error/reconnect counts, manual cleanup of stale rows),

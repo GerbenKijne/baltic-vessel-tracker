@@ -78,19 +78,36 @@ async def _validate_add_to_watchlist(
         )
 
 
+def _validate_threshold_kn(params: dict) -> None:
+    if not isinstance(params.get("threshold_kn"), (int, float)) or params["threshold_kn"] <= 0:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "params.threshold_kn must be a positive number"
+        )
+
+
 async def _validate_params(db: AsyncSession, rule_type: str, params: dict, user: User) -> None:
+    """`geofence_id` and `threshold_kn` are checked independently of which
+    one is this rule's primary trigger -- a geofence_enter/exit rule can
+    stack an optional `threshold_kn` speed gate onto its transition (only
+    fire if also moving above this speed), and a speed_above rule can
+    stack an optional `geofence_id` containment gate onto its threshold
+    (only fire if also currently inside this geofence). This is how
+    "ships over 20kn inside this zone" gets expressed without a separate
+    rule type or a general condition-combinator -- see
+    docs/adr/0006-stacked-alert-conditions.md."""
     if rule_type in ("geofence_enter", "geofence_exit"):
         await _get_owned_geofence(db, str(params.get("geofence_id", "")), user)
+        if "threshold_kn" in params:
+            _validate_threshold_kn(params)
     elif rule_type == "stale":
         if not isinstance(params.get("minutes"), (int, float)) or params["minutes"] <= 0:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST, "params.minutes must be a positive number"
             )
     elif rule_type == "speed_above":
-        if not isinstance(params.get("threshold_kn"), (int, float)) or params["threshold_kn"] <= 0:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, "params.threshold_kn must be a positive number"
-            )
+        _validate_threshold_kn(params)
+        if params.get("geofence_id"):
+            await _get_owned_geofence(db, str(params["geofence_id"]), user)
 
 
 # ---------- geofences ----------

@@ -171,12 +171,23 @@ async def evaluate_position_alerts(
             threshold = rule.params.get("threshold_kn")
             if sog_kn is None or threshold is None or sog_kn <= threshold:
                 continue
+            # Stacked condition (docs/adr/0006): a speed_above rule can
+            # optionally also require the vessel be inside a geofence --
+            # "ships over 20kn inside this zone" -- checked as an extra
+            # AND-gate on top of the primary speed trigger, not a second
+            # independent rule type.
+            also_geofence_id = rule.params.get("geofence_id")
+            context: dict[str, Any] = {"sog_kn": sog_kn, "threshold_kn": threshold}
+            if also_geofence_id:
+                if not await _point_covered_by_geofence(conn, also_geofence_id, lon, lat):
+                    continue
+                context["geofence_id"] = also_geofence_id
             if await _within_cooldown(conn, rule_id, mmsi, rule.cooldown_seconds):
                 continue
             bucket = received_at.replace(microsecond=0).isoformat()
             await _fire(
                 conn, rule_id, mmsi, f"{rule_id}:{mmsi}:speed:{bucket}",
-                {"sog_kn": sog_kn, "threshold_kn": threshold},
+                context,
                 rule_name=rule.name, add_to_watchlist_id=rule.add_to_watchlist_id,
             )
             continue
@@ -195,12 +206,23 @@ async def evaluate_position_alerts(
         )
         if not transitioned:
             continue
+        # Stacked condition (docs/adr/0006): a geofence_enter/exit rule
+        # can optionally also require the vessel be moving above a speed
+        # at the moment of the transition -- "entered this zone above
+        # 20kn" -- again an extra AND-gate, not a second rule type.
+        min_speed = rule.params.get("threshold_kn")
+        context = {"lon": lon, "lat": lat, "geofence_id": geofence_id}
+        if min_speed is not None:
+            if sog_kn is None or sog_kn <= min_speed:
+                continue
+            context["sog_kn"] = sog_kn
+            context["threshold_kn"] = min_speed
         if await _within_cooldown(conn, rule_id, mmsi, rule.cooldown_seconds):
             continue
         bucket = received_at.replace(microsecond=0).isoformat()
         await _fire(
             conn, rule_id, mmsi, f"{rule_id}:{mmsi}:{rule.type}:{bucket}",
-            {"lon": lon, "lat": lat, "geofence_id": geofence_id},
+            context,
             rule_name=rule.name, add_to_watchlist_id=rule.add_to_watchlist_id,
         )
 

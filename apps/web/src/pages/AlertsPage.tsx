@@ -10,7 +10,7 @@ import {
   type AlertRuleWrite,
   type AlertTargetKind,
 } from "../api/alertRules";
-import { geofencesApi } from "../api/geofences";
+import { geofencesApi, type Geofence } from "../api/geofences";
 import { watchlistsApi, type Watchlist } from "../api/watchlists";
 import { GeofenceMapView } from "../components/GeofenceMapView";
 import { TopBar } from "../components/TopBar";
@@ -47,6 +47,12 @@ interface RuleFormState {
   geofenceId: string;
   staleMinutes: string;
   speedThresholdKn: string;
+  // Stacked/secondary conditions (docs/adr/0006) -- kept as separate form
+  // fields from geofenceId/speedThresholdKn above (rather than reusing
+  // them) so switching the primary type in the form doesn't bleed a
+  // leftover value into a condition the user never asked to add.
+  alsoGeofenceId: string;
+  alsoMinSpeedKn: string;
   cooldownMinutes: string;
   enabled: boolean;
   addToWatchlistId: string;
@@ -61,12 +67,15 @@ const EMPTY_FORM: RuleFormState = {
   geofenceId: "",
   staleMinutes: "15",
   speedThresholdKn: "20",
+  alsoGeofenceId: "",
+  alsoMinSpeedKn: "",
   cooldownMinutes: "30",
   enabled: true,
   addToWatchlistId: "",
 };
 
 function ruleToForm(rule: AlertRule): RuleFormState {
+  const isGeofenceType = rule.type === "geofence_enter" || rule.type === "geofence_exit";
   return {
     name: rule.name,
     type: rule.type,
@@ -76,20 +85,29 @@ function ruleToForm(rule: AlertRule): RuleFormState {
     geofenceId: String(rule.params.geofence_id ?? ""),
     staleMinutes: String(rule.params.minutes ?? "15"),
     speedThresholdKn: String(rule.params.threshold_kn ?? "20"),
+    alsoGeofenceId: !isGeofenceType ? String(rule.params.geofence_id ?? "") : "",
+    alsoMinSpeedKn: isGeofenceType ? String(rule.params.threshold_kn ?? "") : "",
     cooldownMinutes: String(Math.round(rule.cooldown_seconds / 60)),
     enabled: rule.enabled,
     addToWatchlistId: rule.add_to_watchlist_id ?? "",
   };
 }
 
-function describeRule(rule: AlertRule, watchlists: Watchlist[]): string {
+function describeRule(rule: AlertRule, watchlists: Watchlist[], geofences: Geofence[]): string {
   const target =
     rule.target.kind === "all"
       ? "all vessels"
       : rule.target.kind === "vessel"
         ? `MMSI ${rule.target.mmsi}`
         : "a watchlist";
-  const base = `${RULE_TYPE_SHORT[rule.type].toLowerCase()} · ${target}`;
+  let base = `${RULE_TYPE_SHORT[rule.type].toLowerCase()} · ${target}`;
+  const isGeofenceType = rule.type === "geofence_enter" || rule.type === "geofence_exit";
+  if (isGeofenceType && rule.params.threshold_kn != null) {
+    base += ` · over ${rule.params.threshold_kn}kn`;
+  } else if (rule.type === "speed_above" && rule.params.geofence_id) {
+    const fence = geofences.find((g) => g.id === rule.params.geofence_id);
+    base += ` · in ${fence?.name ?? "a geofence"}`;
+  }
   if (!rule.add_to_watchlist_id) return base;
   const list = watchlists.find((w) => w.id === rule.add_to_watchlist_id);
   return `${base} · ★ adds to ${list?.name ?? "a list"}`;
@@ -227,6 +245,16 @@ export function AlertsPage() {
         return null;
       }
       params = { geofence_id: form.geofenceId };
+      // Stacked/secondary condition (docs/adr/0006): optionally also
+      // require a minimum speed at the moment of the transition.
+      if (form.alsoMinSpeedKn.trim()) {
+        const minSpeed = Number(form.alsoMinSpeedKn);
+        if (!Number.isFinite(minSpeed) || minSpeed <= 0) {
+          setFormError("The extra speed condition must be a positive number.");
+          return null;
+        }
+        params.threshold_kn = minSpeed;
+      }
     } else if (form.type === "stale") {
       const minutes = Number(form.staleMinutes);
       if (!Number.isFinite(minutes) || minutes <= 0) {
@@ -241,6 +269,11 @@ export function AlertsPage() {
         return null;
       }
       params = { threshold_kn: threshold };
+      // Stacked/secondary condition (docs/adr/0006): optionally also
+      // require the vessel be inside a geofence.
+      if (form.alsoGeofenceId) {
+        params.geofence_id = form.alsoGeofenceId;
+      }
     }
 
     const cooldownMinutes = Number(form.cooldownMinutes);
@@ -333,7 +366,7 @@ export function AlertsPage() {
                 <span>
                   <span style={{ fontSize: 12 }}>{rule.name}</span>
                   <br />
-                  <span className="sub">{describeRule(rule, watchlists)}</span>
+                  <span className="sub">{describeRule(rule, watchlists, geofences)}</span>
                 </span>
                 <span className="n">{rule.event_count}</span>
               </button>
@@ -614,6 +647,32 @@ export function AlertsPage() {
               </div>
             )}
 
+            {(form.type === "geofence_enter" || form.type === "geofence_exit") && (
+              <div className="fld">
+                <label className="eyebrow" htmlFor="ralsospeed">
+                  Also require speed over (optional)
+                </label>
+                <span>
+                  <input
+                    id="ralsospeed"
+                    className="input mono"
+                    style={{ width: 80, textAlign: "right" }}
+                    type="number"
+                    min={0}
+                    placeholder="none"
+                    value={form.alsoMinSpeedKn}
+                    onChange={(e) => setForm((f) => ({ ...f, alsoMinSpeedKn: e.target.value }))}
+                  />{" "}
+                  kn
+                </span>
+                <div style={{ color: "var(--faint)", fontSize: 10.5, marginTop: 6 }}>
+                  Stacks onto the geofence trigger — e.g. only fire if also moving above this speed
+                  at the moment it {form.type === "geofence_enter" ? "enters" : "exits"}. Leave blank
+                  to fire on the transition alone.
+                </div>
+              </div>
+            )}
+
             {form.type === "stale" && (
               <div className="fld">
                 <label className="eyebrow" htmlFor="rminutes">
@@ -651,6 +710,35 @@ export function AlertsPage() {
                   />{" "}
                   kn
                 </span>
+              </div>
+            )}
+
+            {form.type === "speed_above" && (
+              <div className="fld">
+                <label
+                  className="eyebrow"
+                  htmlFor="ralsogeofence"
+                  style={{ display: "block", marginBottom: 5 }}
+                >
+                  Also require inside a geofence (optional)
+                </label>
+                <select
+                  id="ralsogeofence"
+                  className="input"
+                  value={form.alsoGeofenceId}
+                  onChange={(e) => setForm((f) => ({ ...f, alsoGeofenceId: e.target.value }))}
+                >
+                  <option value="">None — fire on speed alone</option>
+                  {geofences.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name} — circle, {(g.radius_m / 1000).toFixed(1)} km
+                    </option>
+                  ))}
+                </select>
+                <div style={{ color: "var(--faint)", fontSize: 10.5, marginTop: 6 }}>
+                  Stacks onto the speed trigger — e.g. only fire while also currently inside this
+                  zone, not anywhere.
+                </div>
               </div>
             )}
 
