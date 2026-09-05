@@ -18,6 +18,7 @@ import { WatchlistPanel } from "../components/WatchlistPanel";
 import type { Freshness } from "../freshness";
 import { freshnessForTime } from "../freshness";
 import { getMapViewMemory, saveMapViewMemory } from "../mapViewMemory";
+import { useBodyClassWhen } from "../useBodyClass";
 
 // Matches worker/config.py's DEFAULT_BOUNDING_BOXES: the whole Baltic Sea.
 const DEFAULT_BBOX = { min_lon: 9, min_lat: 53.5, max_lon: 30.5, max_lat: 65.9 };
@@ -57,6 +58,7 @@ export function MapPage() {
   // five stacked panels are still too much to have permanently on
   // screen on a phone.
   const [panelsOpen, setPanelsOpen] = useState(false);
+  useBodyClassWhen("sheet-open", panelsOpen);
 
   const [selectedMmsi, setSelectedMmsi] = useState<string | null>(null);
   const [selectedWatchlistId, setSelectedWatchlistId] = useState<string | null>(

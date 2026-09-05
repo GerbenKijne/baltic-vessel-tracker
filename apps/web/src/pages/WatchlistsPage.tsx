@@ -4,10 +4,12 @@ import { useNavigate } from "react-router-dom";
 
 import { watchlistsApi, type WatchlistVessel } from "../api/watchlists";
 import { useAuth } from "../AuthContext";
+import { ConfirmButton } from "../components/ConfirmButton";
 import { Freshness } from "../components/Freshness";
 import { TopBar } from "../components/TopBar";
 import { downloadTextFile, parseWatchlistCsv, vesselsToCsv, vesselsToGeoJson } from "../exportUtils";
 import { freshnessForTime, FRESHNESS_LABEL, type Freshness as FreshnessState } from "../freshness";
+import { useBodyClassWhen } from "../useBodyClass";
 
 function FreshnessDot({ state }: { state: FreshnessState }) {
   return (
@@ -145,6 +147,9 @@ export function WatchlistsPage() {
   const [sort, setSort] = useState<SortMode>("seen");
   const [staleOnly, setStaleOnly] = useState(false);
   const [view, setView] = useState<ViewMode>("table");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  useBodyClassWhen("sheet-open", sidebarOpen);
 
   const listsQuery = useQuery({ queryKey: ["watchlists"], queryFn: watchlistsApi.list });
   const detailQuery = useQuery({
@@ -280,13 +285,23 @@ export function WatchlistsPage() {
         title="Watchlists"
         crumb={detail?.name}
         right={
-          <span className="mono" style={{ color: "var(--faint)", fontSize: 11 }}>
-            no application cap
-          </span>
+          <>
+            <button
+              type="button"
+              className={`sidebar-toggle${sidebarOpen ? " open" : ""}`}
+              aria-expanded={sidebarOpen}
+              onClick={() => setSidebarOpen((v) => !v)}
+            >
+              {sidebarOpen ? "✕ Close" : "☰ Lists"}
+            </button>
+            <span className="mono" style={{ color: "var(--faint)", fontSize: 11 }}>
+              no application cap
+            </span>
+          </>
         }
       />
       <div className="body">
-        <aside className="side" aria-label="Lists">
+        <aside className={`side${sidebarOpen ? " open" : ""}`} aria-label="Lists">
           <div className="ssect">
             <div className="eyebrow">Lists</div>
           </div>
@@ -294,7 +309,10 @@ export function WatchlistsPage() {
             <button
               key={list.id}
               className={list.id === selectedId ? "item on" : "item"}
-              onClick={() => setSelectedId(list.id)}
+              onClick={() => {
+                setSelectedId(list.id);
+                setSidebarOpen(false);
+              }}
             >
               <span>{list.name}</span>
               <span className="n">{list.vessel_count}</span>
@@ -458,26 +476,53 @@ export function WatchlistsPage() {
                       Cards
                     </button>
                   </div>
-                  <button className="btn sm" disabled={demoMode} onClick={() => setRenameValue(detail.name)}>
-                    Rename
-                  </button>
-                  <button
-                    className="btn sm danger"
-                    disabled={demoMode}
-                    onClick={() => {
-                      if (confirm(`Delete "${detail.name}"? This can't be undone.`)) {
-                        deleteMutation.mutate();
-                      }
-                    }}
+                  <details
+                    className="overflow-menu"
+                    open={menuOpen}
+                    onToggle={(e) => setMenuOpen(e.currentTarget.open)}
                   >
-                    Delete list
-                  </button>
-                  <button className="btn sm" onClick={() => navigate(`/map?watchlist=${detail.id}`)}>
-                    View on map
-                  </button>
-                  <button className="btn sm" onClick={() => navigate(`/history?watchlist=${detail.id}`)}>
-                    View history
-                  </button>
+                    <summary aria-label="More actions">⋯</summary>
+                    <div className="overflow-menu-list">
+                      <button
+                        type="button"
+                        disabled={demoMode}
+                        onClick={() => {
+                          setMenuOpen(false);
+                          setRenameValue(detail.name);
+                        }}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          navigate(`/map?watchlist=${detail.id}`);
+                        }}
+                      >
+                        View on map
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          navigate(`/history?watchlist=${detail.id}`);
+                        }}
+                      >
+                        View history
+                      </button>
+                      <ConfirmButton
+                        className="danger"
+                        disabled={demoMode}
+                        onConfirm={() => {
+                          setMenuOpen(false);
+                          deleteMutation.mutate();
+                        }}
+                      >
+                        Delete list
+                      </ConfirmButton>
+                    </div>
+                  </details>
                 </>
               )}
             </div>

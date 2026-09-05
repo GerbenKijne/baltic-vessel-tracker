@@ -268,15 +268,18 @@ export function MapView({
           "icon-size": ["case", ["get", "isSelected"], 0.85, 0.6],
         },
         paint: {
+          // Kept in sync with --live/--delayed/--stale in styles.css --
+          // MapLibre paint expressions need literal values, not CSS custom
+          // properties, so these can't just read the tokens directly.
           "icon-color": [
             "match",
             ["get", "freshness"],
             "live",
-            "#58d8ae",
+            "#8fe388",
             "delayed",
-            "#ebb353",
+            "#f6c945",
             "stale",
-            "#eb817f",
+            "#f65e5e",
             "#838e97",
           ],
           "icon-opacity": ["case", ["get", "isDimmed"], 0.35, 1],

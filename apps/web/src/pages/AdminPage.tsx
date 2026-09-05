@@ -6,9 +6,11 @@ import { retentionApi, storageApi } from "../api/retention";
 import { smtpSettingsApi } from "../api/smtpSettings";
 import { sourcesApi } from "../api/sources";
 import { useAuth } from "../AuthContext";
+import { ConfirmButton } from "../components/ConfirmButton";
 import { TopBar } from "../components/TopBar";
 import { formatAgeForTime } from "../freshness";
 import { isSourceDegraded, sourceLabel } from "../sourceLabels";
+import { useBodyClassWhen } from "../useBodyClass";
 
 const ADAPTER_OPTIONS = [
   { value: "simulator", label: "Simulator (demo data)" },
@@ -78,6 +80,8 @@ function formatCount(n: number): string {
 export function AdminPage() {
   const { demoMode } = useAuth();
   const queryClient = useQueryClient();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  useBodyClassWhen("sheet-open", sidebarOpen);
 
   const dataSourcesQuery = useQuery({ queryKey: ["data-sources"], queryFn: dataSourcesApi.list });
   const dataSources = dataSourcesQuery.data ?? [];
@@ -143,9 +147,7 @@ export function AdminPage() {
   }
 
   function handleRemoveSource(source: DataSource) {
-    if (confirm(`Remove data source "${source.name}"?`)) {
-      removeSourceMutation.mutate(source.id);
-    }
+    removeSourceMutation.mutate(source.id);
   }
 
   const sourcesQuery = useQuery({
@@ -189,9 +191,7 @@ export function AdminPage() {
   const sources = sourcesQuery.data ?? [];
 
   function handleRemove(source: string, instance: string) {
-    if (confirm(`Remove ${sourceLabel(source)} instance "${instance}"?`)) {
-      removeMutation.mutate({ source, instance });
-    }
+    removeMutation.mutate({ source, instance });
   }
 
   function handleSaveRetention() {
@@ -263,22 +263,34 @@ export function AdminPage() {
 
   return (
     <>
-      <TopBar title="Admin" />
+      <TopBar
+        title="Admin"
+        right={
+          <button
+            type="button"
+            className={`sidebar-toggle${sidebarOpen ? " open" : ""}`}
+            aria-expanded={sidebarOpen}
+            onClick={() => setSidebarOpen((v) => !v)}
+          >
+            {sidebarOpen ? "✕ Close" : "☰ Sections"}
+          </button>
+        }
+      />
       <div className="body">
-        <aside className="side" aria-label="Admin sections">
+        <aside className={`side${sidebarOpen ? " open" : ""}`} aria-label="Admin sections">
           <div className="ssect">
             <div className="eyebrow">Settings</div>
           </div>
-          <a className="item" href="#data-sources">
+          <a className="item" href="#data-sources" onClick={() => setSidebarOpen(false)}>
             <span>Data sources</span>
           </a>
-          <a className="item" href="#sources">
+          <a className="item" href="#sources" onClick={() => setSidebarOpen(false)}>
             <span>Sources &amp; health</span>
           </a>
-          <a className="item" href="#retention">
+          <a className="item" href="#retention" onClick={() => setSidebarOpen(false)}>
             <span>Retention &amp; storage</span>
           </a>
-          <a className="item" href="#smtp">
+          <a className="item" href="#smtp" onClick={() => setSidebarOpen(false)}>
             <span>SMTP settings</span>
           </a>
         </aside>
@@ -321,11 +333,11 @@ export function AdminPage() {
                     )}
                     {dataSources.map((s) => (
                       <tr key={s.id}>
-                        <td>
+                        <td data-label="Name">
                           <div className="name">{s.name}</div>
                         </td>
-                        <td>{sourceLabel(s.adapter)}</td>
-                        <td>
+                        <td data-label="Adapter">{sourceLabel(s.adapter)}</td>
+                        <td data-label="API key">
                           {s.adapter === "aisstream" ? (
                             <div style={{ display: "grid", gap: 4 }}>
                               <span className="mono" style={{ fontSize: 11 }}>
@@ -337,7 +349,7 @@ export function AdminPage() {
                             <span className="sub">—</span>
                           )}
                         </td>
-                        <td>
+                        <td data-label="Enabled">
                           <button
                             className="chip"
                             aria-pressed={s.enabled}
@@ -349,10 +361,14 @@ export function AdminPage() {
                             {s.enabled ? "Enabled" : "Disabled"}
                           </button>
                         </td>
-                        <td>
-                          <button className="chip" disabled={demoMode} onClick={() => handleRemoveSource(s)}>
+                        <td data-label="Actions">
+                          <ConfirmButton
+                            className="chip"
+                            disabled={demoMode}
+                            onConfirm={() => handleRemoveSource(s)}
+                          >
                             Remove
-                          </button>
+                          </ConfirmButton>
                         </td>
                       </tr>
                     ))}
@@ -488,13 +504,13 @@ export function AdminPage() {
                         </td>
                         <td className="num">{s.reconnect_count}</td>
                         <td style={{ whiteSpace: "nowrap" }}>
-                          <button
+                          <ConfirmButton
                             className="chip"
                             disabled={demoMode}
-                            onClick={() => handleRemove(s.source, s.instance)}
+                            onConfirm={() => handleRemove(s.source, s.instance)}
                           >
                             Remove
-                          </button>
+                          </ConfirmButton>
                         </td>
                       </tr>
                     );

@@ -13,10 +13,12 @@ import {
 import { geofencesApi, type Geofence, type GeofenceShape } from "../api/geofences";
 import { watchlistsApi, type Watchlist } from "../api/watchlists";
 import { useAuth } from "../AuthContext";
+import { ConfirmButton } from "../components/ConfirmButton";
 import { GeofenceMapView } from "../components/GeofenceMapView";
 import { TopBar } from "../components/TopBar";
 import { formatAgeForTime } from "../freshness";
 import { useTheme } from "../ThemeContext";
+import { useBodyClassWhen } from "../useBodyClass";
 
 function geofenceLabel(g: Geofence): string {
   return g.shape === "polygon"
@@ -160,6 +162,8 @@ export function AlertsPage() {
   const [editingRuleId, setEditingRuleId] = useState<string | "new" | null>(null);
   const [form, setForm] = useState<RuleFormState>(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  useBodyClassWhen("sheet-open", sidebarOpen || editingRuleId !== null);
 
   const [gfShape, setGfShape] = useState<GeofenceShape>("circle");
   const [gfName, setGfName] = useState("");
@@ -249,12 +253,14 @@ export function AlertsPage() {
     setForm(EMPTY_FORM);
     setFormError(null);
     setEditingRuleId("new");
+    setSidebarOpen(false);
   }
 
   function handleSelectRule(rule: AlertRule) {
     setForm(ruleToForm(rule));
     setFormError(null);
     setEditingRuleId(rule.id);
+    setSidebarOpen(false);
   }
 
   function buildPayload(): AlertRuleWrite | null {
@@ -365,7 +371,7 @@ export function AlertsPage() {
   }
 
   function handleDeleteRule() {
-    if (editingRuleId && editingRuleId !== "new" && confirm("Delete this rule?")) {
+    if (editingRuleId && editingRuleId !== "new") {
       deleteRuleMutation.mutate(editingRuleId);
     }
   }
@@ -408,9 +414,22 @@ export function AlertsPage() {
 
   return (
     <>
-      <TopBar title="Alerts" crumb={`${unacknowledgedCount} unacknowledged`} />
+      <TopBar
+        title="Alerts"
+        crumb={`${unacknowledgedCount} unacknowledged`}
+        right={
+          <button
+            type="button"
+            className={`sidebar-toggle${sidebarOpen ? " open" : ""}`}
+            aria-expanded={sidebarOpen}
+            onClick={() => setSidebarOpen((v) => !v)}
+          >
+            {sidebarOpen ? "✕ Close" : "☰ Rules & geofences"}
+          </button>
+        }
+      />
       <div className="body">
-        <aside className="side" aria-label="Rules">
+        <aside className={`side${sidebarOpen ? " open" : ""}`} aria-label="Rules">
           <div className="ssect">
             <div className="eyebrow">Rules</div>
           </div>
@@ -461,14 +480,14 @@ export function AlertsPage() {
                   <span className="sub" style={{ marginLeft: "auto" }}>
                     {g.shape === "polygon" ? `${g.polygon?.length ?? 0} pts` : `${((g.radius_m ?? 0) / 1000).toFixed(1)} km`}
                   </span>
-                  <button
+                  <ConfirmButton
                     className="chip"
                     title="Delete geofence"
                     disabled={demoMode}
-                    onClick={() => deleteGeofenceMutation.mutate(g.id)}
+                    onConfirm={() => deleteGeofenceMutation.mutate(g.id)}
                   >
                     ×
-                  </button>
+                  </ConfirmButton>
                 </div>
               ))}
             </div>
@@ -675,6 +694,14 @@ export function AlertsPage() {
 
         {editingRuleId && (
           <aside className="builder" aria-label="Rule builder">
+            <button
+              type="button"
+              className="builder-close"
+              aria-label="Close rule builder"
+              onClick={() => setEditingRuleId(null)}
+            >
+              ✕
+            </button>
             <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--line-soft)" }}>
               <div className="eyebrow">Rule builder</div>
               <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}>
@@ -1042,9 +1069,9 @@ export function AlertsPage() {
                 Save rule
               </button>
               {editingRuleId !== "new" && (
-                <button className="btn" disabled={demoMode} onClick={handleDeleteRule}>
+                <ConfirmButton disabled={demoMode} onConfirm={handleDeleteRule}>
                   Delete
-                </button>
+                </ConfirmButton>
               )}
               <button className="btn" onClick={() => setEditingRuleId(null)}>
                 Cancel

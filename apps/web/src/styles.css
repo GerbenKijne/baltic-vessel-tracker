@@ -11,12 +11,23 @@
   --txt: oklch(0.955 0.005 245);
   --dim: oklch(0.715 0.011 245);
   --faint: oklch(0.555 0.011 245);
-  --live: oklch(0.8 0.13 168);
-  --delayed: oklch(0.8 0.13 78);
-  --stale: oklch(0.72 0.13 22);
+  /* Brighter, more saturated than the original desaturated design-handoff
+     values -- borrowed from History's per-vessel track palette (its
+     green/amber/red read as more vivid than the freshness dots did) at
+     the user's request, applied everywhere these tokens are consumed. */
+  --live: #8fe388;
+  --delayed: #f6c945;
+  --stale: #f65e5e;
   --dark: oklch(0.64 0.018 245);
   --sel: oklch(0.82 0.115 218);
   --focus: oklch(0.82 0.115 218);
+  --float-bg: oklch(0.205 0.014 245 / 0.88);
+  --float-shadow: oklch(0.1 0.02 245 / 0.5);
+  --float-input-bg: oklch(0.17 0.014 245 / 0.9);
+  --float-hover: oklch(0.28 0.014 245 / 0.7);
+  --drawer-bg: oklch(0.205 0.014 245 / 0.93);
+  --drawer-shadow: oklch(0.1 0.02 245 / 0.55);
+  --map-canvas-bg: oklch(0.155 0.016 245);
 }
 
 /* Light theme: same neutral hue/chroma as dark, lightness inverted, and
@@ -35,12 +46,22 @@
   --txt: oklch(0.22 0.012 245);
   --dim: oklch(0.42 0.012 245);
   --faint: oklch(0.56 0.011 245);
-  --live: oklch(0.55 0.13 168);
-  --delayed: oklch(0.58 0.14 78);
-  --stale: oklch(0.55 0.16 22);
+  /* Deeper/more saturated than the dark-theme hex so they keep AA
+     contrast on a near-white background -- same hue family as --live/
+     --delayed/--stale above, not a separate palette. */
+  --live: #2f8a3a;
+  --delayed: #8a6a00;
+  --stale: #c1272d;
   --dark: oklch(0.5 0.018 245);
   --sel: oklch(0.5 0.14 218);
   --focus: oklch(0.5 0.14 218);
+  --float-bg: oklch(0.98 0.004 245 / 0.92);
+  --float-shadow: oklch(0.5 0.02 245 / 0.25);
+  --float-input-bg: oklch(0.94 0.006 245 / 0.95);
+  --float-hover: oklch(0.88 0.008 245 / 0.8);
+  --drawer-bg: oklch(0.98 0.004 245 / 0.95);
+  --drawer-shadow: oklch(0.5 0.02 245 / 0.3);
+  --map-canvas-bg: oklch(0.9 0.006 245);
 }
 
 * {
@@ -319,6 +340,67 @@ button {
   color: var(--txt);
 }
 
+/* overflow menu -- a native <details>/<summary> disclosure, same pattern
+   already used for the map's floating panels, controlled the same way
+   (an `open` prop + onToggle) so it closes itself after a selection. */
+.overflow-menu {
+  position: relative;
+}
+
+.overflow-menu summary {
+  list-style: none;
+  cursor: pointer;
+  width: 28px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--dim);
+}
+
+.overflow-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.overflow-menu-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  background: var(--bg1);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 0 8px 20px oklch(0.1 0.02 245 / 0.3);
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: 4px;
+}
+
+.overflow-menu-list button,
+.overflow-menu-list a {
+  text-align: left;
+  padding: 7px 9px;
+  border-radius: 3px;
+  background: none;
+  border: none;
+  color: var(--txt);
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.overflow-menu-list button:hover,
+.overflow-menu-list a:hover {
+  background: var(--bg2);
+  text-decoration: none;
+}
+
+.overflow-menu-list .danger {
+  color: var(--stale);
+}
+
 .warnbar {
   display: flex;
   align-items: center;
@@ -329,6 +411,15 @@ button {
   padding: 7px 12px;
   border-radius: 3px;
   font-size: 12px;
+}
+
+/* .btn's own background/border already contrast fine against .warnbar's
+   dark amber in both themes -- only the *text* color needs overriding
+   here, since .btn doesn't set one itself and would otherwise inherit
+   .warnbar's pale-on-dark color, invisible against .btn's own light-mode
+   background. */
+.warnbar .btn {
+  color: var(--txt);
 }
 
 .app.with-banner {
@@ -726,7 +817,7 @@ table.t .unk {
 .map-canvas {
   position: absolute;
   inset: 0;
-  background: oklch(0.155 0.016 245);
+  background: var(--map-canvas-bg);
 }
 
 .map-error {
@@ -760,11 +851,11 @@ table.t .unk {
 .float {
   position: absolute;
   z-index: 500;
-  background: oklch(0.205 0.014 245 / 0.88);
+  background: var(--float-bg);
   backdrop-filter: blur(9px);
   border: 1px solid var(--line);
   border-radius: 4px;
-  box-shadow: 0 10px 26px oklch(0.1 0.02 245 / 0.5);
+  box-shadow: 0 10px 26px var(--float-shadow);
 }
 
 .float summary {
@@ -791,7 +882,7 @@ table.t .unk {
 }
 
 .map-search-panel .input {
-  background: oklch(0.17 0.014 245 / 0.9);
+  background: var(--float-input-bg);
 }
 
 .map-search-results {
@@ -876,7 +967,7 @@ table.t .unk {
 }
 
 .vrow:hover {
-  background: oklch(0.28 0.014 245 / 0.7);
+  background: var(--float-hover);
 }
 
 .vrow .nm {
@@ -1000,7 +1091,11 @@ table.t .unk {
 
 .map-banners {
   top: 10px;
-  left: 12px;
+  /* Clears .map-search-panel's right edge (left: 10px + width: 312px)
+     with a gutter, so the banner no longer paints under the search
+     panel -- both are absolutely positioned in the same top-left
+     region and previously overlapped there. */
+  left: 334px;
   right: 372px;
   display: flex;
   flex-direction: column;
@@ -1030,10 +1125,10 @@ table.t .unk {
   bottom: 10px;
   width: 344px;
   border-radius: 4px;
-  background: oklch(0.205 0.014 245 / 0.93);
+  background: var(--drawer-bg);
   backdrop-filter: blur(10px);
   border: 1px solid var(--line);
-  box-shadow: 0 14px 34px oklch(0.1 0.02 245 / 0.55);
+  box-shadow: 0 14px 34px var(--drawer-shadow);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1217,7 +1312,7 @@ table.t .unk {
   position: relative;
   flex: 1;
   min-height: 0;
-  background: oklch(0.155 0.016 245);
+  background: var(--map-canvas-bg);
 }
 
 .history-gaps {
@@ -1308,11 +1403,27 @@ table.t .unk {
 }
 
 .builder {
+  position: relative;
   width: 352px;
   flex: none;
   border-left: 1px solid var(--line-soft);
   background: var(--bg1);
   overflow: auto;
+}
+
+.builder-close {
+  display: none;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg2);
+  color: var(--dim);
+  cursor: pointer;
 }
 
 .fld {
@@ -1396,6 +1507,21 @@ table.t .unk {
   display: none;
 }
 
+/* Same idea as .map-panel-toggle, generalized for any page with a
+   `.side` list (Watchlists/Alerts/Admin) -- rendered through TopBar's
+   `right` slot so no shared-component change was needed, but pulled out
+   of that flow on mobile via `position: fixed` so it stays reachable as
+   the close control even once `.side.open` covers the screen. */
+.sidebar-toggle {
+  display: none;
+}
+
+/* Alerts' rule builder is already only ever rendered while a rule is
+   being edited, so it doesn't need its own open/close state -- just a
+   close affordance once it's a full-screen sheet on mobile (see
+   .builder-close's full rule near .builder, and its mobile-only
+   `display` below). */
+
 @media (max-width: 680px) {
   .map-panel-toggle {
     display: block;
@@ -1444,27 +1570,98 @@ table.t .unk {
     width: auto;
   }
 
-  /* Secondary screens (Watchlists/History/Admin): a 246px fixed sidebar
+  /* Secondary screens (Watchlists/Alerts/Admin): a 246px fixed sidebar
      alongside content leaves almost nothing for the content itself on a
-     narrow phone. Stack it above instead, capped so the actual page
-     content is still reachable without excessive scrolling. */
+     narrow phone. Hidden by default; .sidebar-toggle (below) opens it as
+     a full-screen sheet instead, same pattern as the map's own panels. */
   .body {
     flex-direction: column;
   }
 
   .side {
+    display: none;
+  }
+
+  .side.open {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 500;
+    max-height: none;
     width: auto;
-    max-height: 45vh;
-    border-right: 0;
-    border-bottom: 1px solid var(--line-soft);
+    border: 0;
+  }
+
+  /* In-flow (wraps into the topbar's second row alongside the crumb/tag,
+     like any other `right` content) while closed, so its width doesn't
+     matter -- only pulled out to a fixed corner once open, when it
+     becomes the close control for the now full-screen .side.open and
+     nothing below it is visible to overlap anyway. */
+  .sidebar-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: none;
+    padding: 6px 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: var(--bg1);
+    color: var(--txt);
+  }
+
+  .sidebar-toggle.open {
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    z-index: 501;
   }
 
   /* Alerts' rule builder -- same fixed-width-panel problem as .side and
-     .drawer above. */
+     .drawer above, but it's already only ever rendered while a rule is
+     open, so it becomes the full-screen sheet directly instead of
+     needing its own toggle. */
   .builder {
+    position: fixed;
+    inset: 0;
+    z-index: 500;
     width: auto;
-    border-left: 0;
-    border-top: 1px solid var(--line-soft);
+    border: 0;
+  }
+
+  .builder-close {
+    display: grid;
+  }
+
+  /* Both the map's own panel toggle and the generic sidebar/builder
+     sheets hide the icon rail while open -- reclaims the 56px column a
+     phone can't spare, and there's already a close control on screen. */
+  body.sheet-open .nav {
+    display: none;
+  }
+
+  body.sheet-open .app {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    height: auto;
+    flex-wrap: wrap;
+    row-gap: 4px;
+    padding: 8px 14px;
+  }
+
+  .topbar h1 {
+    flex: 1 1 100%;
+  }
+
+  .crumb {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .login-form {
@@ -1482,5 +1679,43 @@ table.t .unk {
   .history-toolbar {
     flex-wrap: wrap;
     height: auto;
+  }
+
+  /* Admin's data-source table -> one card per source, via a CSS-only
+     responsive-table technique (td[data-label]::before) rather than a
+     second, duplicated markup block -- the Enabled toggle/key-updater/
+     Remove stay the same elements either way. Scoped to #data-sources
+     only; Sources & health and Retention's tables weren't flagged. */
+  #data-sources table.t,
+  #data-sources table.t tbody,
+  #data-sources table.t tr,
+  #data-sources table.t td {
+    display: block;
+    width: 100%;
+  }
+
+  #data-sources table.t thead {
+    display: none;
+  }
+
+  #data-sources table.t tr {
+    border: 1px solid var(--line-soft);
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+
+  #data-sources table.t td {
+    border: 0;
+    padding: 4px 0;
+  }
+
+  #data-sources table.t td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--faint);
   }
 }

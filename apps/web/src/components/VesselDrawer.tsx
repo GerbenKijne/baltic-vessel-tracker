@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { LiveVessel } from "../api/live";
 import type { Watchlist } from "../api/watchlists";
 import { vesselsApi } from "../api/vessels";
+import { countryForMmsi } from "../mid";
 import { sourceLabel } from "../sourceLabels";
 import { Freshness } from "./Freshness";
 
@@ -97,7 +98,9 @@ export function VesselDrawer({
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               <Freshness time={lastSeenTime} showAge />
-              <span className="tag">FLAG UNKNOWN</span>
+              <span className="tag">
+                FLAG {(countryForMmsi(vessel.mmsi) ?? "Unknown").toUpperCase()}
+              </span>
             </div>
           </div>
           <button className="btn sm" aria-label="Close vessel detail" onClick={onClose}>
