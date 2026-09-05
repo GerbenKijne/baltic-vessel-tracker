@@ -35,3 +35,16 @@ def circle_polygon_wkt(
     points.append(points[0])  # WKT polygons must close the ring
     coords = ", ".join(f"{lon} {lat}" for lon, lat in points)
     return f"POLYGON(({coords}))"
+
+
+def polygon_wkt(points: list[tuple[float, float]]) -> str:
+    """Freeform-polygon counterpart to circle_polygon_wkt: takes an open
+    ring of (lon, lat) pairs as drawn on the map, closes it if the caller
+    didn't already repeat the first point, and formats as a WKT POLYGON.
+    No validation here (self-intersection, vertex count) -- that's the
+    router's job (shapely), since this is just string formatting."""
+    ring = list(points)
+    if ring[0] != ring[-1]:
+        ring.append(ring[0])
+    coords = ", ".join(f"{lon} {lat}" for lon, lat in ring)
+    return f"POLYGON(({coords}))"

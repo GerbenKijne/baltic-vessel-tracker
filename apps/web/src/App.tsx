@@ -18,10 +18,15 @@ const SECTIONS = [
   { to: "/history", code: "HI", label: "History" },
 ];
 
-function AppShell({ onLogout }: { onLogout: () => void }) {
+function AppShell({ onLogout, demoMode }: { onLogout: () => void; demoMode: boolean }) {
   const { theme, toggleTheme } = useTheme();
   return (
-    <div className="app">
+    <div className={`app${demoMode ? " with-banner" : ""}`}>
+      {demoMode && (
+        <div className="demo-banner" role="status">
+          Demo mode — read-only. Changes are disabled on this instance.
+        </div>
+      )}
       <nav className="nav" aria-label="Sections">
         <div className="brand mono">BVT</div>
         {SECTIONS.map((s) => (
@@ -101,8 +106,8 @@ export function App() {
   }
 
   return (
-    <AuthProvider value={{ email: user.email, logout: handleLogout }}>
-      <AppShell onLogout={handleLogout} />
+    <AuthProvider value={{ email: user.email, demoMode: user.demo_mode, logout: handleLogout }}>
+      <AppShell onLogout={handleLogout} demoMode={user.demo_mode} />
     </AuthProvider>
   );
 }

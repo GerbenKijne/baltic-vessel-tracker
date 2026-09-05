@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { watchlistsApi, type WatchlistVessel } from "../api/watchlists";
+import { useAuth } from "../AuthContext";
 import { Freshness } from "../components/Freshness";
 import { TopBar } from "../components/TopBar";
 import { downloadTextFile, parseWatchlistCsv, vesselsToCsv, vesselsToGeoJson } from "../exportUtils";
@@ -30,7 +31,15 @@ function Unknown({ text = "Unknown" }: { text?: string }) {
   return <span className="unk">{text}</span>;
 }
 
-function VesselTableRow({ vessel, onRemove }: { vessel: WatchlistVessel; onRemove: () => void }) {
+function VesselTableRow({
+  vessel,
+  onRemove,
+  disabled,
+}: {
+  vessel: WatchlistVessel;
+  onRemove: () => void;
+  disabled: boolean;
+}) {
   const lastSeenTime = vessel.observed_at ?? vessel.received_at;
   return (
     <tr>
@@ -61,7 +70,7 @@ function VesselTableRow({ vessel, onRemove }: { vessel: WatchlistVessel; onRemov
         <span className="sub">—</span>
       </td>
       <td>
-        <button className="chip" onClick={onRemove}>
+        <button className="chip" disabled={disabled} onClick={onRemove}>
           Remove
         </button>
       </td>
@@ -69,7 +78,15 @@ function VesselTableRow({ vessel, onRemove }: { vessel: WatchlistVessel; onRemov
   );
 }
 
-function VesselCard({ vessel, onRemove }: { vessel: WatchlistVessel; onRemove: () => void }) {
+function VesselCard({
+  vessel,
+  onRemove,
+  disabled,
+}: {
+  vessel: WatchlistVessel;
+  onRemove: () => void;
+  disabled: boolean;
+}) {
   const lastSeenTime = vessel.observed_at ?? vessel.received_at;
   return (
     <div className="card">
@@ -109,7 +126,7 @@ function VesselCard({ vessel, onRemove }: { vessel: WatchlistVessel; onRemove: (
         ))}
       </div>
       <div style={{ marginTop: 9 }}>
-        <button className="chip" onClick={onRemove}>
+        <button className="chip" disabled={disabled} onClick={onRemove}>
           Remove
         </button>
       </div>
@@ -118,6 +135,7 @@ function VesselCard({ vessel, onRemove }: { vessel: WatchlistVessel; onRemove: (
 }
 
 export function WatchlistsPage() {
+  const { demoMode } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -301,7 +319,7 @@ export function WatchlistsPage() {
                 value={newListName}
                 onChange={(e) => setNewListName(e.target.value)}
               />
-              <button className="btn sm" type="submit" disabled={!newListName.trim()}>
+              <button className="btn sm" type="submit" disabled={demoMode || !newListName.trim()}>
                 Add
               </button>
             </form>
@@ -324,7 +342,7 @@ export function WatchlistsPage() {
               />
               <button
                 className="btn sm"
-                disabled={!selectedId || importing}
+                disabled={demoMode || !selectedId || importing}
                 title={selectedId ? undefined : "Select a list first"}
                 onClick={() => fileInputRef.current?.click()}
               >
@@ -397,7 +415,7 @@ export function WatchlistsPage() {
                     onChange={(e) => setRenameValue(e.target.value)}
                     autoFocus
                   />
-                  <button className="btn sm" type="submit">
+                  <button className="btn sm" type="submit" disabled={demoMode}>
                     Save
                   </button>
                   <button className="btn sm" type="button" onClick={() => setRenameValue(null)}>
@@ -440,11 +458,12 @@ export function WatchlistsPage() {
                       Cards
                     </button>
                   </div>
-                  <button className="btn sm" onClick={() => setRenameValue(detail.name)}>
+                  <button className="btn sm" disabled={demoMode} onClick={() => setRenameValue(detail.name)}>
                     Rename
                   </button>
                   <button
                     className="btn sm danger"
+                    disabled={demoMode}
                     onClick={() => {
                       if (confirm(`Delete "${detail.name}"? This can't be undone.`)) {
                         deleteMutation.mutate();
@@ -491,6 +510,7 @@ export function WatchlistsPage() {
                       <VesselTableRow
                         key={vessel.mmsi}
                         vessel={vessel}
+                        disabled={demoMode}
                         onRemove={() => removeVesselMutation.mutate(vessel.mmsi)}
                       />
                     ))}
@@ -502,6 +522,7 @@ export function WatchlistsPage() {
                     <VesselCard
                       key={vessel.mmsi}
                       vessel={vessel}
+                      disabled={demoMode}
                       onRemove={() => removeVesselMutation.mutate(vessel.mmsi)}
                     />
                   ))}

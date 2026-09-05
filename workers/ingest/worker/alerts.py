@@ -44,7 +44,8 @@ async def _matching_rules(
         await conn.execute(
             text(
                 """
-                SELECT id, name, type, params, cooldown_seconds, add_to_watchlist_id
+                SELECT id, name, type, params, cooldown_seconds, add_to_watchlist_id,
+                       email_to, webhook_url, webhook_secret
                 FROM alert_rules
                 WHERE enabled = true
                   AND type = ANY(:types)
@@ -119,6 +120,18 @@ async def _add_to_watchlist(
     )
 
 
+async def _queue_notification(conn: AsyncConnection, event_id: str, channel: str) -> None:
+    await conn.execute(
+        text(
+            """
+            INSERT INTO notification_deliveries (id, event_id, channel, status)
+            VALUES (:id, :event_id, :channel, 'pending')
+            """
+        ),
+        {"id": str(uuid.uuid4()), "event_id": event_id, "channel": channel},
+    )
+
+
 async def _fire(
     conn: AsyncConnection,
     rule_id: str,
@@ -127,7 +140,10 @@ async def _fire(
     context: dict[str, Any],
     rule_name: str = "",
     add_to_watchlist_id: Optional[str] = None,
+    email_to: Optional[str] = None,
+    webhook_url: Optional[str] = None,
 ) -> None:
+    event_id = str(uuid.uuid4())
     result = await conn.execute(
         text(
             """
@@ -137,7 +153,7 @@ async def _fire(
             """
         ),
         {
-            "id": str(uuid.uuid4()),
+            "id": event_id,
             "rule_id": rule_id,
             "mmsi": mmsi,
             "transition_key": transition_key,
@@ -147,11 +163,18 @@ async def _fire(
     )
     if result.rowcount == 0:
         # A replay of the same transition (ON CONFLICT DO NOTHING above) --
-        # already handled the first time it fired, including any auto-add.
+        # already handled the first time it fired, including any auto-add
+        # and any queued deliveries.
         return
     logger.info("Alert fired: rule=%s mmsi=%s %s", rule_id, mmsi, context)
     if add_to_watchlist_id:
         await _add_to_watchlist(conn, add_to_watchlist_id, mmsi, rule_name)
+    # Queued here (same transaction as the event insert), delivered later
+    # by notify.py's own loop -- see docs/adr/0007-alert-delivery-channels.md.
+    if email_to:
+        await _queue_notification(conn, event_id, "email")
+    if webhook_url:
+        await _queue_notification(conn, event_id, "webhook")
 
 
 async def evaluate_position_alerts(
@@ -189,6 +212,7 @@ async def evaluate_position_alerts(
                 conn, rule_id, mmsi, f"{rule_id}:{mmsi}:speed:{bucket}",
                 context,
                 rule_name=rule.name, add_to_watchlist_id=rule.add_to_watchlist_id,
+                email_to=rule.email_to, webhook_url=rule.webhook_url,
             )
             continue
 
@@ -224,6 +248,7 @@ async def evaluate_position_alerts(
             conn, rule_id, mmsi, f"{rule_id}:{mmsi}:{rule.type}:{bucket}",
             context,
             rule_name=rule.name, add_to_watchlist_id=rule.add_to_watchlist_id,
+            email_to=rule.email_to, webhook_url=rule.webhook_url,
         )
 
 
@@ -232,7 +257,8 @@ async def evaluate_stale_alerts(engine: AsyncEngine) -> None:
         rules = (
             await conn.execute(
                 text(
-                    "SELECT id, name, target, params, cooldown_seconds, add_to_watchlist_id "
+                    "SELECT id, name, target, params, cooldown_seconds, add_to_watchlist_id, "
+                    "       email_to, webhook_url "
                     "FROM alert_rules WHERE enabled = true AND type = 'stale'"
                 )
             )
@@ -284,6 +310,7 @@ async def evaluate_stale_alerts(engine: AsyncEngine) -> None:
                     conn, rule_id, row.mmsi, f"{rule_id}:{row.mmsi}:stale:{bucket}",
                     {"minutes_threshold": minutes},
                     rule_name=rule.name, add_to_watchlist_id=rule.add_to_watchlist_id,
+                    email_to=rule.email_to, webhook_url=rule.webhook_url,
                 )
 
 

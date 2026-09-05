@@ -101,6 +101,7 @@ button {
 .app {
   display: grid;
   grid-template-columns: 56px 1fr;
+  grid-template-rows: 1fr;
   height: 100vh;
   /* On mobile, 100vh is the *tallest* the viewport ever gets (browser
      chrome collapsed) -- dvh tracks the address bar showing/hiding, so
@@ -328,6 +329,25 @@ button {
   padding: 7px 12px;
   border-radius: 3px;
   font-size: 12px;
+}
+
+.app.with-banner {
+  grid-template-rows: auto 1fr;
+}
+
+.demo-banner {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  background: oklch(0.3 0.055 78);
+  border-bottom: 1px solid oklch(0.46 0.09 78);
+  color: oklch(0.94 0.03 78);
+  padding: 5px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: center;
 }
 
 /* freshness — colour is always paired with a glyph and a word */

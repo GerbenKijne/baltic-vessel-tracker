@@ -1,19 +1,24 @@
 import { request } from "./client";
 
+export type GeofenceShape = "circle" | "polygon";
+
 export interface Geofence {
   id: string;
   name: string;
-  center_lon: number;
-  center_lat: number;
-  radius_m: number;
+  shape: GeofenceShape;
+  center_lon: number | null;
+  center_lat: number | null;
+  radius_m: number | null;
+  polygon: [number, number][] | null;
   enabled: boolean;
 }
 
 export interface GeofenceCreate {
   name: string;
-  center_lon: number;
-  center_lat: number;
-  radius_m: number;
+  center_lon?: number;
+  center_lat?: number;
+  radius_m?: number;
+  polygon?: [number, number][];
 }
 
 export const geofencesApi = {

@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import Cookie, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .config import get_settings
+from .config import Settings, get_settings
 from .db import get_db
 from .models import User
 from .redis_client import get_redis
@@ -38,3 +38,11 @@ async def require_csrf(
     """Double-submit CSRF check for cookie-authenticated mutating requests."""
     if not csrf_cookie or not x_csrf_token or csrf_cookie != x_csrf_token:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "CSRF check failed")
+
+
+async def require_write_access(app_settings: Settings = Depends(get_settings)) -> None:
+    """Blocks every mutating route when DEMO_MODE is on, so a publicly
+    shared demo instance can't be tampered with. Stacked alongside
+    require_csrf on the same routes -- see docs/adr/0009-demo-mode.md."""
+    if app_settings.demo_mode:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Demo mode: this instance is read-only")

@@ -2,6 +2,7 @@ export interface CurrentUser {
   id: string;
   email: string;
   role: string;
+  demo_mode: boolean;
 }
 
 class ApiError extends Error {

@@ -10,12 +10,19 @@ import {
   type AlertRuleWrite,
   type AlertTargetKind,
 } from "../api/alertRules";
-import { geofencesApi, type Geofence } from "../api/geofences";
+import { geofencesApi, type Geofence, type GeofenceShape } from "../api/geofences";
 import { watchlistsApi, type Watchlist } from "../api/watchlists";
+import { useAuth } from "../AuthContext";
 import { GeofenceMapView } from "../components/GeofenceMapView";
 import { TopBar } from "../components/TopBar";
 import { formatAgeForTime } from "../freshness";
 import { useTheme } from "../ThemeContext";
+
+function geofenceLabel(g: Geofence): string {
+  return g.shape === "polygon"
+    ? `${g.name} — polygon, ${g.polygon?.length ?? 0} pts`
+    : `${g.name} — circle, ${((g.radius_m ?? 0) / 1000).toFixed(1)} km`;
+}
 
 const RULE_TYPE_LABEL: Record<AlertRuleType, string> = {
   geofence_enter: "Entered",
@@ -56,6 +63,11 @@ interface RuleFormState {
   cooldownMinutes: string;
   enabled: boolean;
   addToWatchlistId: string;
+  emailEnabled: boolean;
+  emailTo: string;
+  webhookEnabled: boolean;
+  webhookUrl: string;
+  webhookSecret: string;
 }
 
 const EMPTY_FORM: RuleFormState = {
@@ -72,6 +84,11 @@ const EMPTY_FORM: RuleFormState = {
   cooldownMinutes: "30",
   enabled: true,
   addToWatchlistId: "",
+  emailEnabled: false,
+  emailTo: "",
+  webhookEnabled: false,
+  webhookUrl: "",
+  webhookSecret: "",
 };
 
 function ruleToForm(rule: AlertRule): RuleFormState {
@@ -90,6 +107,12 @@ function ruleToForm(rule: AlertRule): RuleFormState {
     cooldownMinutes: String(Math.round(rule.cooldown_seconds / 60)),
     enabled: rule.enabled,
     addToWatchlistId: rule.add_to_watchlist_id ?? "",
+    emailEnabled: !!rule.email_to,
+    emailTo: rule.email_to ?? "",
+    webhookEnabled: !!rule.webhook_url,
+    webhookUrl: rule.webhook_url ?? "",
+    // Never prefilled -- the API never echoes the real secret back.
+    webhookSecret: "",
   };
 }
 
@@ -108,13 +131,18 @@ function describeRule(rule: AlertRule, watchlists: Watchlist[], geofences: Geofe
     const fence = geofences.find((g) => g.id === rule.params.geofence_id);
     base += ` · in ${fence?.name ?? "a geofence"}`;
   }
-  if (!rule.add_to_watchlist_id) return base;
-  const list = watchlists.find((w) => w.id === rule.add_to_watchlist_id);
-  return `${base} · ★ adds to ${list?.name ?? "a list"}`;
+  if (rule.add_to_watchlist_id) {
+    const list = watchlists.find((w) => w.id === rule.add_to_watchlist_id);
+    base += ` · ★ adds to ${list?.name ?? "a list"}`;
+  }
+  const channels = [rule.email_to && "email", rule.webhook_url && "webhook"].filter(Boolean);
+  if (channels.length > 0) base += ` · notifies: ${channels.join(", ")}`;
+  return base;
 }
 
 export function AlertsPage() {
   const { theme } = useTheme();
+  const { email, demoMode } = useAuth();
   const queryClient = useQueryClient();
 
   const rulesQuery = useQuery({ queryKey: ["alert-rules"], queryFn: alertRulesApi.list });
@@ -133,10 +161,12 @@ export function AlertsPage() {
   const [form, setForm] = useState<RuleFormState>(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const [gfShape, setGfShape] = useState<GeofenceShape>("circle");
   const [gfName, setGfName] = useState("");
   const [gfLat, setGfLat] = useState("");
   const [gfLon, setGfLon] = useState("");
   const [gfRadiusKm, setGfRadiusKm] = useState("");
+  const [gfPolygon, setGfPolygon] = useState<[number, number][]>([]);
   const [gfError, setGfError] = useState<string | null>(null);
 
   const gfCenterLon = gfLon.trim() && Number.isFinite(Number(gfLon)) ? Number(gfLon) : null;
@@ -148,6 +178,12 @@ export function AlertsPage() {
     setGfLon(centerLon.toFixed(5));
     setGfLat(centerLat.toFixed(5));
     setGfRadiusKm(radiusM != null ? (radiusM / 1000).toFixed(2) : "");
+    setGfError(null);
+  }
+
+  function handleShapeChange(shape: GeofenceShape) {
+    setGfShape(shape);
+    setGfPolygon([]);
     setGfError(null);
   }
 
@@ -183,6 +219,7 @@ export function AlertsPage() {
       setGfLat("");
       setGfLon("");
       setGfRadiusKm("");
+      setGfPolygon([]);
       setGfError(null);
     },
     onError: () => setGfError("Failed to create — try again."),
@@ -286,8 +323,17 @@ export function AlertsPage() {
       return null;
     }
 
+    if (form.emailEnabled && !form.emailTo.trim()) {
+      setFormError("Enter an email address, or turn off the Email channel.");
+      return null;
+    }
+    if (form.webhookEnabled && !form.webhookUrl.trim()) {
+      setFormError("Enter a webhook URL, or turn off the Webhook channel.");
+      return null;
+    }
+
     setFormError(null);
-    return {
+    const payload: AlertRuleWrite = {
       name: form.name.trim(),
       type: form.type,
       target,
@@ -295,7 +341,17 @@ export function AlertsPage() {
       cooldown_seconds: Math.round(cooldownMinutes * 60),
       enabled: form.enabled,
       add_to_watchlist_id: form.addToWatchlistId || null,
+      email_to: form.emailEnabled ? form.emailTo.trim() : null,
+      webhook_url: form.webhookEnabled ? form.webhookUrl.trim() : null,
     };
+    // Omitted entirely (not sent as "") when blank, so a blank secret
+    // field on an edit means "leave the stored one unchanged" rather
+    // than clearing it -- the field is never prefilled with the real
+    // value, so an untouched field must not overwrite it.
+    if (form.webhookEnabled && form.webhookSecret.trim()) {
+      payload.webhook_secret = form.webhookSecret.trim();
+    }
+    return payload;
   }
 
   function handleSaveRule() {
@@ -315,13 +371,21 @@ export function AlertsPage() {
   }
 
   function handleCreateGeofence() {
-    const lat = Number(gfLat);
-    const lon = Number(gfLon);
-    const radiusKm = Number(gfRadiusKm);
     if (!gfName.trim()) {
       setGfError("Name is required.");
       return;
     }
+    if (gfShape === "polygon") {
+      if (gfPolygon.length < 3) {
+        setGfError("Draw at least 3 points on the map.");
+        return;
+      }
+      createGeofenceMutation.mutate({ name: gfName.trim(), polygon: gfPolygon });
+      return;
+    }
+    const lat = Number(gfLat);
+    const lon = Number(gfLon);
+    const radiusKm = Number(gfRadiusKm);
     if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
       setGfError("Latitude must be between -90 and 90.");
       return;
@@ -377,7 +441,7 @@ export function AlertsPage() {
             ))}
           </div>
           <div className="ssect" style={{ borderTop: "1px solid var(--line-soft)" }}>
-            <button className="btn pri sm" style={{ width: "100%" }} onClick={handleNewRule}>
+            <button className="btn pri sm" style={{ width: "100%" }} disabled={demoMode} onClick={handleNewRule}>
               + New rule
             </button>
           </div>
@@ -395,11 +459,12 @@ export function AlertsPage() {
                   <span className="dot" />
                   <span style={{ fontSize: 11.5 }}>{g.name}</span>
                   <span className="sub" style={{ marginLeft: "auto" }}>
-                    {(g.radius_m / 1000).toFixed(1)} km
+                    {g.shape === "polygon" ? `${g.polygon?.length ?? 0} pts` : `${((g.radius_m ?? 0) / 1000).toFixed(1)} km`}
                   </span>
                   <button
                     className="chip"
                     title="Delete geofence"
+                    disabled={demoMode}
                     onClick={() => deleteGeofenceMutation.mutate(g.id)}
                   >
                     ×
@@ -408,13 +473,32 @@ export function AlertsPage() {
               ))}
             </div>
             <div style={{ display: "grid", gap: 5, marginTop: 8 }}>
+              <div className="radio">
+                <button
+                  type="button"
+                  className={gfShape === "circle" ? "on" : undefined}
+                  onClick={() => handleShapeChange("circle")}
+                >
+                  Circle
+                </button>
+                <button
+                  type="button"
+                  className={gfShape === "polygon" ? "on" : undefined}
+                  onClick={() => handleShapeChange("polygon")}
+                >
+                  Polygon
+                </button>
+              </div>
               <GeofenceMapView
                 theme={theme}
                 existingGeofences={geofences}
+                shape={gfShape}
                 centerLon={gfCenterLon}
                 centerLat={gfCenterLat}
                 radiusM={gfRadiusM}
                 onChange={handleMapDraw}
+                polygonPoints={gfPolygon}
+                onPolygonChange={setGfPolygon}
               />
               <input
                 className="input"
@@ -422,35 +506,47 @@ export function AlertsPage() {
                 value={gfName}
                 onChange={(e) => setGfName(e.target.value)}
               />
-              <div style={{ display: "flex", gap: 5 }}>
-                <input
-                  className="input mono"
-                  placeholder="Lat"
-                  style={{ width: 0, flex: 1 }}
-                  value={gfLat}
-                  onChange={(e) => setGfLat(e.target.value)}
-                />
-                <input
-                  className="input mono"
-                  placeholder="Lon"
-                  style={{ width: 0, flex: 1 }}
-                  value={gfLon}
-                  onChange={(e) => setGfLon(e.target.value)}
-                />
-              </div>
-              <input
-                className="input mono"
-                placeholder="Radius (km)"
-                value={gfRadiusKm}
-                onChange={(e) => setGfRadiusKm(e.target.value)}
-              />
+              {gfShape === "circle" ? (
+                <>
+                  <div style={{ display: "flex", gap: 5 }}>
+                    <input
+                      className="input mono"
+                      placeholder="Lat"
+                      style={{ width: 0, flex: 1 }}
+                      value={gfLat}
+                      onChange={(e) => setGfLat(e.target.value)}
+                    />
+                    <input
+                      className="input mono"
+                      placeholder="Lon"
+                      style={{ width: 0, flex: 1 }}
+                      value={gfLon}
+                      onChange={(e) => setGfLon(e.target.value)}
+                    />
+                  </div>
+                  <input
+                    className="input mono"
+                    placeholder="Radius (km)"
+                    value={gfRadiusKm}
+                    onChange={(e) => setGfRadiusKm(e.target.value)}
+                  />
+                </>
+              ) : (
+                gfPolygon.length > 0 && (
+                  <button className="btn sm" style={{ width: "100%" }} onClick={() => setGfPolygon([])}>
+                    Clear points ({gfPolygon.length})
+                  </button>
+                )
+              )}
               {gfError && <span style={{ color: "var(--stale)", fontSize: 10.5 }}>{gfError}</span>}
-              <button className="btn sm" style={{ width: "100%" }} onClick={handleCreateGeofence}>
+              <button
+                className="btn sm"
+                style={{ width: "100%" }}
+                disabled={demoMode}
+                onClick={handleCreateGeofence}
+              >
                 + Add geofence
               </button>
-            </div>
-            <div style={{ color: "var(--faint)", fontSize: 10.5, marginTop: 8 }}>
-              Circles only for now — freeform polygon drawing isn't built yet.
             </div>
           </div>
         </aside>
@@ -474,7 +570,7 @@ export function AlertsPage() {
             <div style={{ flex: 1 }} />
             <button
               className="btn sm"
-              disabled={unacknowledgedCount === 0 || acknowledgeAllMutation.isPending}
+              disabled={demoMode || unacknowledgedCount === 0 || acknowledgeAllMutation.isPending}
               onClick={() => acknowledgeAllMutation.mutate()}
             >
               {acknowledgeAllMutation.isPending
@@ -566,6 +662,7 @@ export function AlertsPage() {
                 ) : (
                   <button
                     className="btn pri sm"
+                    disabled={demoMode}
                     onClick={() => acknowledgeMutation.mutate(selectedEvent.id)}
                   >
                     Acknowledge
@@ -649,7 +746,7 @@ export function AlertsPage() {
                   <option value="">Choose a geofence…</option>
                   {geofences.map((g) => (
                     <option key={g.id} value={g.id}>
-                      {g.name} — circle, {(g.radius_m / 1000).toFixed(1)} km
+                      {geofenceLabel(g)}
                     </option>
                   ))}
                 </select>
@@ -745,7 +842,7 @@ export function AlertsPage() {
                   <option value="">None — fire on speed alone</option>
                   {geofences.map((g) => (
                     <option key={g.id} value={g.id}>
-                      {g.name} — circle, {(g.radius_m / 1000).toFixed(1)} km
+                      {geofenceLabel(g)}
                     </option>
                   ))}
                 </select>
@@ -865,22 +962,71 @@ export function AlertsPage() {
               <span className="eyebrow" style={{ display: "block", marginBottom: 5 }}>
                 Channels
               </span>
-              <div style={{ display: "grid", gap: 7 }}>
+              <div style={{ display: "grid", gap: 9 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span className="sw on" role="switch" aria-checked="true" />
                   <span style={{ fontSize: 12 }}>In-app event log</span>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, opacity: 0.5 }}>
-                  <span className="sw" role="switch" aria-checked="false" />
-                  <span style={{ fontSize: 12 }} title="Not built yet">
-                    Email
-                  </span>
+
+                <div style={{ display: "grid", gap: 5 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span
+                      className={`sw ${form.emailEnabled ? "on" : ""}`}
+                      role="switch"
+                      aria-checked={form.emailEnabled}
+                      style={{ cursor: "pointer" }}
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          emailEnabled: !f.emailEnabled,
+                          emailTo: !f.emailEnabled && !f.emailTo ? email : f.emailTo,
+                        }))
+                      }
+                    />
+                    <span style={{ fontSize: 12 }}>Email</span>
+                  </div>
+                  {form.emailEnabled && (
+                    <input
+                      className="input mono"
+                      placeholder="Recipient email"
+                      value={form.emailTo}
+                      onChange={(e) => setForm((f) => ({ ...f, emailTo: e.target.value }))}
+                    />
+                  )}
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, opacity: 0.5 }}>
-                  <span className="sw" role="switch" aria-checked="false" />
-                  <span style={{ fontSize: 12 }} title="Not built yet">
-                    Webhook
-                  </span>
+
+                <div style={{ display: "grid", gap: 5 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span
+                      className={`sw ${form.webhookEnabled ? "on" : ""}`}
+                      role="switch"
+                      aria-checked={form.webhookEnabled}
+                      style={{ cursor: "pointer" }}
+                      onClick={() => setForm((f) => ({ ...f, webhookEnabled: !f.webhookEnabled }))}
+                    />
+                    <span style={{ fontSize: 12 }}>Webhook</span>
+                  </div>
+                  {form.webhookEnabled && (
+                    <>
+                      <input
+                        className="input mono"
+                        placeholder="https://…"
+                        value={form.webhookUrl}
+                        onChange={(e) => setForm((f) => ({ ...f, webhookUrl: e.target.value }))}
+                      />
+                      <input
+                        className="input mono"
+                        type="password"
+                        placeholder={
+                          editingRuleId !== "new" && rules.find((r) => r.id === editingRuleId)?.has_webhook_secret
+                            ? "Secret set — leave blank to keep"
+                            : "Secret (optional, signs the payload)"
+                        }
+                        value={form.webhookSecret}
+                        onChange={(e) => setForm((f) => ({ ...f, webhookSecret: e.target.value }))}
+                      />
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -892,11 +1038,11 @@ export function AlertsPage() {
             )}
 
             <div style={{ padding: "12px 14px", display: "flex", gap: 7 }}>
-              <button className="btn pri" style={{ flex: 1 }} onClick={handleSaveRule}>
+              <button className="btn pri" style={{ flex: 1 }} disabled={demoMode} onClick={handleSaveRule}>
                 Save rule
               </button>
               {editingRuleId !== "new" && (
-                <button className="btn" onClick={handleDeleteRule}>
+                <button className="btn" disabled={demoMode} onClick={handleDeleteRule}>
                   Delete
                 </button>
               )}

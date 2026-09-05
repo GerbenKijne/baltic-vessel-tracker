@@ -18,6 +18,7 @@ from .alerts import alerts_loop, evaluate_position_alerts
 from .config import load_config
 from .dedupe import is_duplicate
 from .normalize import IgnorableMessage, parse_and_normalize
+from .notify import notify_loop
 from .persistence import (
     get_previous_position,
     insert_position_observation,
@@ -161,6 +162,7 @@ async def run() -> None:
         *ingest_tasks,
         retention_loop(engine, config),
         alerts_loop(engine),
+        notify_loop(engine),
         watch_for_changes(engine, startup_fingerprint),
     )
 

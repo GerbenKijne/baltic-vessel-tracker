@@ -4,12 +4,14 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from geoalchemy2.elements import WKTElement
+from shapely.errors import ShapelyError
+from shapely.geometry import Polygon
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
-from ..deps import get_current_user, require_csrf
-from ..geo import circle_polygon_wkt
+from ..deps import get_current_user, require_csrf, require_write_access
+from ..geo import circle_polygon_wkt, polygon_wkt
 from ..models import AlertEvent, AlertRule, Geofence, User, Vessel, Watchlist
 from ..schemas import (
     ALERT_RULE_TYPES,
@@ -24,6 +26,55 @@ from ..schemas import (
 )
 
 router = APIRouter(prefix="/api/v1", tags=["alerts"])
+
+_WRITE_GUARD = [Depends(require_csrf), Depends(require_write_access)]
+
+
+def _webhook_secret_preview(secret: Optional[str]) -> Optional[str]:
+    return f"••••{secret[-4:]}" if secret and len(secret) >= 4 else None
+
+
+def _alert_rule_out(rule: AlertRule, event_count: int) -> AlertRuleOut:
+    return AlertRuleOut(
+        id=str(rule.id),
+        name=rule.name,
+        type=rule.type,
+        target=rule.target,
+        params=rule.params,
+        cooldown_seconds=rule.cooldown_seconds,
+        enabled=rule.enabled,
+        add_to_watchlist_id=str(rule.add_to_watchlist_id) if rule.add_to_watchlist_id else None,
+        email_to=rule.email_to,
+        webhook_url=rule.webhook_url,
+        has_webhook_secret=bool(rule.webhook_secret),
+        webhook_secret_preview=_webhook_secret_preview(rule.webhook_secret),
+        event_count=event_count,
+    )
+
+
+def _geofence_out(g: Geofence) -> GeofenceOut:
+    shape = g.style.get("shape", "circle")
+    if shape == "polygon":
+        return GeofenceOut(
+            id=str(g.id),
+            name=g.name,
+            shape="polygon",
+            center_lon=None,
+            center_lat=None,
+            radius_m=None,
+            polygon=g.style.get("points"),
+            enabled=g.enabled,
+        )
+    return GeofenceOut(
+        id=str(g.id),
+        name=g.name,
+        shape="circle",
+        center_lon=g.style.get("center_lon"),
+        center_lat=g.style.get("center_lat"),
+        radius_m=g.style.get("radius_m"),
+        polygon=None,
+        enabled=g.enabled,
+    )
 
 
 def _parse_id(raw_id: str, not_found_message: str) -> uuid.UUID:
@@ -111,6 +162,11 @@ async def _validate_params(db: AsyncSession, rule_type: str, params: dict, user:
             await _get_owned_geofence(db, str(params["geofence_id"]), user)
 
 
+def _validate_channels(email_to: Optional[str], webhook_url: Optional[str]) -> None:
+    if webhook_url and not (webhook_url.startswith("http://") or webhook_url.startswith("https://")):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "webhook_url must be http(s)")
+
+
 # ---------- geofences ----------
 
 
@@ -121,60 +177,74 @@ async def list_geofences(
     db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[GeofenceOut]:
     rows = (await db.execute(select(Geofence).where(Geofence.user_id == user.id))).scalars().all()
-    return [
-        GeofenceOut(
-            id=str(g.id),
-            name=g.name,
-            center_lon=g.style["center_lon"],
-            center_lat=g.style["center_lat"],
-            radius_m=g.style["radius_m"],
-            enabled=g.enabled,
-        )
-        for g in rows
-    ]
+    return [_geofence_out(g) for g in rows]
 
 
 @router.post(
     "/geofences",
     response_model=GeofenceOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_csrf)],
+    dependencies=_WRITE_GUARD,
 )
 async def create_geofence(
     body: GeofenceCreate,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> GeofenceOut:
-    wkt = circle_polygon_wkt(body.center_lon, body.center_lat, body.radius_m)
+    is_circle = (
+        body.center_lon is not None or body.center_lat is not None or body.radius_m is not None
+    )
+    if is_circle and body.polygon is not None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Provide either center/radius or polygon, not both"
+        )
+    if is_circle:
+        if body.center_lon is None or body.center_lat is None or body.radius_m is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "center_lon, center_lat, and radius_m are all required"
+            )
+        wkt = circle_polygon_wkt(body.center_lon, body.center_lat, body.radius_m)
+        style = {
+            "shape": "circle",
+            "center_lon": body.center_lon,
+            "center_lat": body.center_lat,
+            "radius_m": body.radius_m,
+        }
+    elif body.polygon is not None:
+        if len(body.polygon) < 3:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "polygon needs at least 3 points")
+        points = [(p[0], p[1]) for p in body.polygon]
+        try:
+            if not Polygon(points).is_valid:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, "polygon is self-intersecting or otherwise invalid"
+                )
+        except ShapelyError:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "polygon is not a valid shape"
+            ) from None
+        wkt = polygon_wkt(points)
+        style = {"shape": "polygon", "points": body.polygon}
+    else:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Provide either center/radius or polygon")
+
     geofence = Geofence(
         id=uuid.uuid4(),
         user_id=user.id,
         name=body.name,
         geometry=WKTElement(wkt, srid=4326),
-        style={
-            "shape": "circle",
-            "center_lon": body.center_lon,
-            "center_lat": body.center_lat,
-            "radius_m": body.radius_m,
-        },
+        style=style,
         enabled=True,
     )
     db.add(geofence)
     await db.commit()
-    return GeofenceOut(
-        id=str(geofence.id),
-        name=geofence.name,
-        center_lon=body.center_lon,
-        center_lat=body.center_lat,
-        radius_m=body.radius_m,
-        enabled=True,
-    )
+    return _geofence_out(geofence)
 
 
 @router.delete(
     "/geofences/{geofence_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_csrf)],
+    dependencies=_WRITE_GUARD,
 )
 async def delete_geofence(
     geofence_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
@@ -213,27 +283,14 @@ async def list_alert_rules(
             .order_by(AlertRule.name)
         )
     ).all()
-    return [
-        AlertRuleOut(
-            id=str(rule.id),
-            name=rule.name,
-            type=rule.type,
-            target=rule.target,
-            params=rule.params,
-            cooldown_seconds=rule.cooldown_seconds,
-            enabled=rule.enabled,
-            add_to_watchlist_id=str(rule.add_to_watchlist_id) if rule.add_to_watchlist_id else None,
-            event_count=count,
-        )
-        for rule, count in rows
-    ]
+    return [_alert_rule_out(rule, count) for rule, count in rows]
 
 
 @router.post(
     "/alert-rules",
     response_model=AlertRuleOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_csrf)],
+    dependencies=_WRITE_GUARD,
 )
 async def create_alert_rule(
     body: AlertRuleCreate,
@@ -247,6 +304,7 @@ async def create_alert_rule(
     await _validate_target(db, body.target, user)
     await _validate_params(db, body.type, body.params, user)
     await _validate_add_to_watchlist(db, body.add_to_watchlist_id, user)
+    _validate_channels(body.email_to, body.webhook_url)
 
     rule = AlertRule(
         id=uuid.uuid4(),
@@ -261,26 +319,19 @@ async def create_alert_rule(
         add_to_watchlist_id=(
             uuid.UUID(body.add_to_watchlist_id) if body.add_to_watchlist_id else None
         ),
+        email_to=body.email_to,
+        webhook_url=body.webhook_url,
+        webhook_secret=body.webhook_secret if body.webhook_url else None,
     )
     db.add(rule)
     await db.commit()
-    return AlertRuleOut(
-        id=str(rule.id),
-        name=rule.name,
-        type=rule.type,
-        target=rule.target,
-        params=rule.params,
-        cooldown_seconds=rule.cooldown_seconds,
-        enabled=rule.enabled,
-        add_to_watchlist_id=body.add_to_watchlist_id,
-        event_count=0,
-    )
+    return _alert_rule_out(rule, 0)
 
 
 @router.patch(
     "/alert-rules/{rule_id}",
     response_model=AlertRuleOut,
-    dependencies=[Depends(require_csrf)],
+    dependencies=_WRITE_GUARD,
 )
 async def update_alert_rule(
     rule_id: str,
@@ -302,6 +353,7 @@ async def update_alert_rule(
     if body.type is not None or body.params is not None:
         await _validate_params(db, new_type, new_params, user)
     await _validate_add_to_watchlist(db, body.add_to_watchlist_id, user)
+    _validate_channels(body.email_to, body.webhook_url)
 
     if body.name is not None:
         rule.name = body.name
@@ -315,6 +367,18 @@ async def update_alert_rule(
     rule.add_to_watchlist_id = (
         uuid.UUID(body.add_to_watchlist_id) if body.add_to_watchlist_id else None
     )
+    # email_to/webhook_url are "always sent" fields too (see
+    # AlertRuleUpdate) -- None clears them. webhook_secret is the
+    # exception: the real value is never echoed back to the client, so
+    # None means "leave the stored secret unchanged" instead. Clearing
+    # webhook_url also clears any stored secret, since a secret with no
+    # URL to send it to is meaningless.
+    rule.email_to = body.email_to
+    rule.webhook_url = body.webhook_url
+    if not body.webhook_url:
+        rule.webhook_secret = None
+    elif body.webhook_secret is not None:
+        rule.webhook_secret = body.webhook_secret
     if body.cooldown_seconds is not None:
         rule.cooldown_seconds = body.cooldown_seconds
     if body.enabled is not None:
@@ -324,23 +388,13 @@ async def update_alert_rule(
     event_count = await db.scalar(
         select(func.count()).select_from(AlertEvent).where(AlertEvent.rule_id == rule.id)
     )
-    return AlertRuleOut(
-        id=str(rule.id),
-        name=rule.name,
-        type=rule.type,
-        target=rule.target,
-        params=rule.params,
-        cooldown_seconds=rule.cooldown_seconds,
-        enabled=rule.enabled,
-        add_to_watchlist_id=str(rule.add_to_watchlist_id) if rule.add_to_watchlist_id else None,
-        event_count=event_count or 0,
-    )
+    return _alert_rule_out(rule, event_count or 0)
 
 
 @router.delete(
     "/alert-rules/{rule_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_csrf)],
+    dependencies=_WRITE_GUARD,
 )
 async def delete_alert_rule(
     rule_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
@@ -396,7 +450,7 @@ async def list_alert_events(
 @router.post(
     "/alert-events/acknowledge-all",
     response_model=AcknowledgeAllOut,
-    dependencies=[Depends(require_csrf)],
+    dependencies=_WRITE_GUARD,
 )
 async def acknowledge_all_alert_events(
     db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
@@ -416,7 +470,7 @@ async def acknowledge_all_alert_events(
 @router.post(
     "/alert-events/{event_id}/acknowledge",
     response_model=AlertEventOut,
-    dependencies=[Depends(require_csrf)],
+    dependencies=_WRITE_GUARD,
 )
 async def acknowledge_alert_event(
     event_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)

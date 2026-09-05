@@ -1,14 +1,16 @@
 import uuid
 from datetime import datetime, timezone
+from email.message import EmailMessage
 
+import aiosmtplib
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
-from ..deps import get_current_user, require_csrf
-from ..models import DataSourceConfig, RetentionSettings, SourceStatus
+from ..deps import get_current_user, require_csrf, require_write_access
+from ..models import DataSourceConfig, RetentionSettings, SmtpSettings, SourceStatus
 from ..schemas import (
     DATA_SOURCE_ADAPTERS,
     DataSourceCreate,
@@ -16,12 +18,17 @@ from ..schemas import (
     DataSourceUpdate,
     RetentionSettingsOut,
     RetentionSettingsUpdate,
+    SmtpSettingsOut,
+    SmtpSettingsUpdate,
+    SmtpTestEmailIn,
     SourceStatusOut,
     StorageStatsOut,
     TableStorageOut,
 )
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+
+_WRITE_GUARD = [Depends(get_current_user), Depends(require_csrf), Depends(require_write_access)]
 
 # The tables PRD SS10 actually created (0001_initial_schema) -- reported
 # even though several (geofences, alert_rules, ...) are empty today since
@@ -82,7 +89,7 @@ async def list_source_status(db: AsyncSession = Depends(get_db)) -> list[SourceS
 @router.delete(
     "/sources/{source}/{instance}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(get_current_user), Depends(require_csrf)],
+    dependencies=_WRITE_GUARD,
 )
 async def remove_source_status(
     source: str, instance: str, db: AsyncSession = Depends(get_db)
@@ -128,7 +135,7 @@ async def get_retention_settings(db: AsyncSession = Depends(get_db)) -> Retentio
 @router.put(
     "/retention",
     response_model=RetentionSettingsOut,
-    dependencies=[Depends(get_current_user), Depends(require_csrf)],
+    dependencies=_WRITE_GUARD,
 )
 async def update_retention_settings(
     body: RetentionSettingsUpdate, db: AsyncSession = Depends(get_db)
@@ -161,6 +168,102 @@ async def update_retention_settings(
         sweep_interval_seconds=body.sweep_interval_seconds,
         updated_at=now,
     )
+
+
+def _smtp_settings_out(row: SmtpSettings) -> SmtpSettingsOut:
+    preview = f"••••{row.password[-4:]}" if row.password and len(row.password) >= 4 else None
+    return SmtpSettingsOut(
+        host=row.host,
+        port=row.port,
+        username=row.username,
+        has_password=bool(row.password),
+        password_preview=preview,
+        from_address=row.from_address,
+        use_tls=row.use_tls,
+        updated_at=row.updated_at,
+    )
+
+
+@router.get(
+    "/smtp-settings", response_model=SmtpSettingsOut, dependencies=[Depends(get_current_user)]
+)
+async def get_smtp_settings(db: AsyncSession = Depends(get_db)) -> SmtpSettingsOut:
+    row = await db.get(SmtpSettings, 1)
+    if row is None:
+        # Only reachable if the seed row from the migration was deleted.
+        return SmtpSettingsOut(
+            host=None,
+            port=587,
+            username=None,
+            has_password=False,
+            password_preview=None,
+            from_address=None,
+            use_tls=True,
+            updated_at=datetime.now(timezone.utc),
+        )
+    return _smtp_settings_out(row)
+
+
+@router.put(
+    "/smtp-settings",
+    response_model=SmtpSettingsOut,
+    dependencies=_WRITE_GUARD,
+)
+async def update_smtp_settings(
+    body: SmtpSettingsUpdate, db: AsyncSession = Depends(get_db)
+) -> SmtpSettingsOut:
+    """Takes effect on the ingest worker's next notification-delivery pass
+    (it reads this table fresh on every attempt) -- no restart needed."""
+    row = await db.get(SmtpSettings, 1)
+    if row is None:
+        row = SmtpSettings(id=1)
+        db.add(row)
+    row.host = body.host
+    row.port = body.port
+    row.username = body.username
+    if body.password is not None:
+        row.password = body.password
+    row.from_address = body.from_address
+    row.use_tls = body.use_tls
+    row.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return _smtp_settings_out(row)
+
+
+@router.post(
+    "/smtp-settings/test-email",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=_WRITE_GUARD,
+)
+async def send_test_email(body: SmtpTestEmailIn, db: AsyncSession = Depends(get_db)) -> None:
+    """Synchronous send for immediate pass/fail feedback in the Admin UI --
+    the actual alert-delivery path (workers/ingest/worker/notify.py) is
+    async with retries; this is deliberately not that, since an operator
+    verifying credentials wants an answer now, not "check back in 15s"."""
+    row = await db.get(SmtpSettings, 1)
+    if row is None or not row.host or not row.from_address:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "SMTP host and from address must be set first"
+        )
+
+    message = EmailMessage()
+    message["From"] = row.from_address
+    message["To"] = body.to
+    message["Subject"] = "Baltic Vessel Tracker — test email"
+    message.set_content(
+        "This is a test message from your Baltic Vessel Tracker instance's SMTP settings."
+    )
+    try:
+        await aiosmtplib.send(
+            message,
+            hostname=row.host,
+            port=row.port,
+            username=row.username or None,
+            password=row.password or None,
+            start_tls=row.use_tls,
+        )
+    except Exception as exc:  # noqa: BLE001 - surface the real SMTP error to the operator
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"SMTP send failed: {exc}") from exc
 
 
 @router.get(
@@ -222,7 +325,7 @@ async def list_data_sources(db: AsyncSession = Depends(get_db)) -> list[DataSour
     "/data-sources",
     response_model=DataSourceOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(get_current_user), Depends(require_csrf)],
+    dependencies=_WRITE_GUARD,
 )
 async def create_data_source(
     body: DataSourceCreate, db: AsyncSession = Depends(get_db)
@@ -250,7 +353,7 @@ async def create_data_source(
 @router.patch(
     "/data-sources/{source_id}",
     response_model=DataSourceOut,
-    dependencies=[Depends(get_current_user), Depends(require_csrf)],
+    dependencies=_WRITE_GUARD,
 )
 async def update_data_source(
     source_id: uuid.UUID, body: DataSourceUpdate, db: AsyncSession = Depends(get_db)
@@ -274,7 +377,7 @@ async def update_data_source(
 @router.delete(
     "/data-sources/{source_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(get_current_user), Depends(require_csrf)],
+    dependencies=_WRITE_GUARD,
 )
 async def delete_data_source(source_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> None:
     result = await db.execute(delete(DataSourceConfig).where(DataSourceConfig.id == source_id))

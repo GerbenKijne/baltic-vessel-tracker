@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 
 interface AuthContextValue {
   email: string;
+  demoMode: boolean;
   logout: () => void;
 }
 

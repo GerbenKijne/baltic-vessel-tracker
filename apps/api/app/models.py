@@ -163,6 +163,14 @@ class AlertRule(Base):
     add_to_watchlist_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PGUUID, ForeignKey("watchlists.id", ondelete="SET NULL"), nullable=True
     )
+    # Delivery channels beyond the always-on in-app event log. Both are
+    # optional and independent -- a rule can email, webhook, both, or
+    # neither. webhook_secret is plaintext (same trust model as
+    # DataSourceConfig.api_key) but never echoed back by the API; see
+    # AlertRuleOut.has_webhook_secret/webhook_secret_preview.
+    email_to: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    webhook_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    webhook_secret: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class AlertEvent(Base):
@@ -223,6 +231,27 @@ class RetentionSettings(Base):
     default_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
     watchlisted_days: Mapped[int] = mapped_column(Integer, nullable=False, default=365)
     sweep_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=3600)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SmtpSettings(Base):
+    """Singleton row (id is always 1), same pattern as RetentionSettings --
+    the ingest worker's notification loop (workers/ingest/worker/notify.py)
+    reads this table fresh on every delivery attempt instead of a static
+    env-loaded value, so an admin change here takes effect on the next
+    attempt without restarting the worker."""
+
+    __tablename__ = "smtp_settings"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_smtp_settings_singleton"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    host: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    port: Mapped[int] = mapped_column(Integer, nullable=False, default=587)
+    username: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Plaintext, same trust model as DataSourceConfig.api_key.
+    password: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    from_address: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    use_tls: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

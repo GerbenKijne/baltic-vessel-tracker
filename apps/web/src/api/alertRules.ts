@@ -21,6 +21,10 @@ export interface AlertRule {
   // adds the vessel to this watchlist -- lets a geofence (or any other)
   // rule auto-curate a list.
   add_to_watchlist_id: string | null;
+  email_to: string | null;
+  webhook_url: string | null;
+  has_webhook_secret: boolean;
+  webhook_secret_preview: string | null;
   event_count: number;
 }
 
@@ -32,6 +36,11 @@ export interface AlertRuleWrite {
   cooldown_seconds: number;
   enabled: boolean;
   add_to_watchlist_id: string | null;
+  email_to: string | null;
+  webhook_url: string | null;
+  // Omit entirely to leave a previously-saved secret unchanged (the real
+  // value is never sent back by the API to prefill this).
+  webhook_secret?: string;
 }
 
 export const alertRulesApi = {

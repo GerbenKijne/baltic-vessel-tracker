@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 
 import { dataSourcesApi, type DataSource } from "../api/dataSources";
 import { retentionApi, storageApi } from "../api/retention";
+import { smtpSettingsApi } from "../api/smtpSettings";
 import { sourcesApi } from "../api/sources";
+import { useAuth } from "../AuthContext";
 import { TopBar } from "../components/TopBar";
 import { formatAgeForTime } from "../freshness";
 import { isSourceDegraded, sourceLabel } from "../sourceLabels";
@@ -17,7 +19,7 @@ const ADAPTER_OPTIONS = [
 // a moment for the container to actually restart.
 const WATCH_INTERVAL_LABEL = "a minute";
 
-function DataSourceKeyUpdater({ source }: { source: DataSource }) {
+function DataSourceKeyUpdater({ source, disabled }: { source: DataSource; disabled: boolean }) {
   const queryClient = useQueryClient();
   const [key, setKey] = useState("");
   const [status, setStatus] = useState<string | null>(null);
@@ -44,7 +46,7 @@ function DataSourceKeyUpdater({ source }: { source: DataSource }) {
       />
       <button
         className="btn sm"
-        disabled={!key.trim() || mutation.isPending}
+        disabled={disabled || !key.trim() || mutation.isPending}
         onClick={() => {
           setStatus(null);
           mutation.mutate();
@@ -74,6 +76,7 @@ function formatCount(n: number): string {
 }
 
 export function AdminPage() {
+  const { demoMode } = useAuth();
   const queryClient = useQueryClient();
 
   const dataSourcesQuery = useQuery({ queryKey: ["data-sources"], queryFn: dataSourcesApi.list });
@@ -204,6 +207,60 @@ export function AdminPage() {
     });
   }
 
+  const smtpQuery = useQuery({ queryKey: ["smtp-settings"], queryFn: smtpSettingsApi.get });
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState("587");
+  const [smtpUsername, setSmtpUsername] = useState("");
+  const [smtpPassword, setSmtpPassword] = useState("");
+  const [smtpFrom, setSmtpFrom] = useState("");
+  const [smtpUseTls, setSmtpUseTls] = useState(true);
+  const [smtpSaveStatus, setSmtpSaveStatus] = useState<string | null>(null);
+  const [testEmailTo, setTestEmailTo] = useState("");
+  const [testEmailStatus, setTestEmailStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!smtpQuery.data) return;
+    setSmtpHost(smtpQuery.data.host ?? "");
+    setSmtpPort(String(smtpQuery.data.port));
+    setSmtpUsername(smtpQuery.data.username ?? "");
+    setSmtpFrom(smtpQuery.data.from_address ?? "");
+    setSmtpUseTls(smtpQuery.data.use_tls);
+  }, [smtpQuery.data]);
+
+  const updateSmtpMutation = useMutation({
+    mutationFn: smtpSettingsApi.update,
+    onSuccess: (data) => {
+      queryClient.setQueryData(["smtp-settings"], data);
+      setSmtpPassword("");
+      setSmtpSaveStatus("Saved.");
+    },
+    onError: () => setSmtpSaveStatus("Failed to save — try again."),
+  });
+
+  const testEmailMutation = useMutation({
+    mutationFn: () => smtpSettingsApi.testEmail(testEmailTo.trim()),
+    onSuccess: () => setTestEmailStatus("Sent — check the inbox."),
+    onError: (err) =>
+      setTestEmailStatus(err instanceof Error ? err.message : "Failed to send — check settings."),
+  });
+
+  function handleSaveSmtp() {
+    const port = Number(smtpPort);
+    if (!Number.isFinite(port) || port < 1 || port > 65535) {
+      setSmtpSaveStatus("Port must be between 1 and 65535.");
+      return;
+    }
+    setSmtpSaveStatus(null);
+    updateSmtpMutation.mutate({
+      host: smtpHost.trim() || null,
+      port,
+      username: smtpUsername.trim() || null,
+      ...(smtpPassword.trim() ? { password: smtpPassword.trim() } : {}),
+      from_address: smtpFrom.trim() || null,
+      use_tls: smtpUseTls,
+    });
+  }
+
   return (
     <>
       <TopBar title="Admin" />
@@ -220,6 +277,9 @@ export function AdminPage() {
           </a>
           <a className="item" href="#retention">
             <span>Retention &amp; storage</span>
+          </a>
+          <a className="item" href="#smtp">
+            <span>SMTP settings</span>
           </a>
         </aside>
 
@@ -271,7 +331,7 @@ export function AdminPage() {
                               <span className="mono" style={{ fontSize: 11 }}>
                                 {s.api_key_preview ?? "not set"}
                               </span>
-                              <DataSourceKeyUpdater source={s} />
+                              <DataSourceKeyUpdater source={s} disabled={demoMode} />
                             </div>
                           ) : (
                             <span className="sub">—</span>
@@ -281,6 +341,7 @@ export function AdminPage() {
                           <button
                             className="chip"
                             aria-pressed={s.enabled}
+                            disabled={demoMode}
                             onClick={() =>
                               toggleSourceMutation.mutate({ id: s.id, enabled: !s.enabled })
                             }
@@ -289,7 +350,7 @@ export function AdminPage() {
                           </button>
                         </td>
                         <td>
-                          <button className="chip" onClick={() => handleRemoveSource(s)}>
+                          <button className="chip" disabled={demoMode} onClick={() => handleRemoveSource(s)}>
                             Remove
                           </button>
                         </td>
@@ -362,7 +423,7 @@ export function AdminPage() {
                     <button
                       className="btn pri sm"
                       onClick={handleAddSource}
-                      disabled={createSourceMutation.isPending}
+                      disabled={demoMode || createSourceMutation.isPending}
                     >
                       Add source
                     </button>
@@ -427,7 +488,11 @@ export function AdminPage() {
                         </td>
                         <td className="num">{s.reconnect_count}</td>
                         <td style={{ whiteSpace: "nowrap" }}>
-                          <button className="chip" onClick={() => handleRemove(s.source, s.instance)}>
+                          <button
+                            className="chip"
+                            disabled={demoMode}
+                            onClick={() => handleRemove(s.source, s.instance)}
+                          >
                             Remove
                           </button>
                         </td>
@@ -502,7 +567,7 @@ export function AdminPage() {
                 <button
                   className="btn pri sm"
                   onClick={handleSaveRetention}
-                  disabled={updateRetentionMutation.isPending}
+                  disabled={demoMode || updateRetentionMutation.isPending}
                 >
                   Save
                 </button>
@@ -551,8 +616,106 @@ export function AdminPage() {
             </div>
           </div>
 
+          <div className="box" id="smtp" style={{ marginTop: 14 }}>
+            <h2>SMTP settings</h2>
+            <div className="bd">
+              <p style={{ fontSize: 11.5, color: "var(--dim)", margin: "0 0 12px" }}>
+                Used by alert rules with the Email channel turned on (Alerts → rule builder). Takes
+                effect on the ingest worker's next delivery attempt, no restart needed.
+              </p>
+              <div style={{ display: "grid", gap: 6, maxWidth: 420 }}>
+                <input
+                  className="input"
+                  placeholder="SMTP host"
+                  value={smtpHost}
+                  onChange={(e) => setSmtpHost(e.target.value)}
+                />
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    className="input mono"
+                    style={{ width: 90 }}
+                    type="number"
+                    placeholder="Port"
+                    value={smtpPort}
+                    onChange={(e) => setSmtpPort(e.target.value)}
+                  />
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5 }}>
+                    <input
+                      type="checkbox"
+                      checked={smtpUseTls}
+                      onChange={(e) => setSmtpUseTls(e.target.checked)}
+                    />
+                    STARTTLS
+                  </label>
+                </div>
+                <input
+                  className="input"
+                  placeholder="Username (optional)"
+                  value={smtpUsername}
+                  onChange={(e) => setSmtpUsername(e.target.value)}
+                />
+                <input
+                  className="input mono"
+                  type="password"
+                  placeholder={smtpQuery.data?.has_password ? "Password set — leave blank to keep" : "Password"}
+                  value={smtpPassword}
+                  onChange={(e) => setSmtpPassword(e.target.value)}
+                />
+                <input
+                  className="input"
+                  placeholder="From address"
+                  value={smtpFrom}
+                  onChange={(e) => setSmtpFrom(e.target.value)}
+                />
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <button
+                    className="btn pri sm"
+                    onClick={handleSaveSmtp}
+                    disabled={demoMode || updateSmtpMutation.isPending}
+                  >
+                    Save
+                  </button>
+                  {smtpSaveStatus && (
+                    <span style={{ fontSize: 11, color: "var(--faint)" }}>{smtpSaveStatus}</span>
+                  )}
+                </div>
+              </div>
+              <div
+                style={{
+                  borderTop: "1px solid var(--line-soft)",
+                  marginTop: 12,
+                  paddingTop: 10,
+                  display: "flex",
+                  gap: 6,
+                  alignItems: "center",
+                  maxWidth: 420,
+                }}
+              >
+                <input
+                  className="input"
+                  placeholder="Send a test to…"
+                  value={testEmailTo}
+                  onChange={(e) => setTestEmailTo(e.target.value)}
+                />
+                <button
+                  className="btn sm"
+                  disabled={demoMode || !testEmailTo.trim() || testEmailMutation.isPending}
+                  onClick={() => {
+                    setTestEmailStatus(null);
+                    testEmailMutation.mutate();
+                  }}
+                >
+                  {testEmailMutation.isPending ? "Sending…" : "Send test email"}
+                </button>
+              </div>
+              {testEmailStatus && (
+                <span style={{ fontSize: 10.5, color: "var(--faint)" }}>{testEmailStatus}</span>
+              )}
+            </div>
+          </div>
+
           <p style={{ color: "var(--faint)", fontSize: 11, marginTop: 10 }}>
-            Alert channels, backup &amp; restore, and account settings aren't built yet.
+            Backup &amp; restore and multi-user account settings aren't built yet.
           </p>
         </div>
       </div>

@@ -34,6 +34,11 @@ class Settings(BaseSettings):
 
     cookie_secure: bool = True
 
+    # See docs/adr/0009-demo-mode.md -- blocks every mutating route so a
+    # publicly shared instance can't be tampered with. Does not add
+    # anonymous access; visitors still need a login.
+    demo_mode: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

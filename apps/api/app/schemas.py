@@ -13,6 +13,7 @@ class UserOut(BaseModel):
     id: str
     email: EmailStr
     role: str
+    demo_mode: bool
 
 
 class VesselOut(BaseModel):
@@ -188,32 +189,40 @@ class StorageStatsOut(BaseModel):
 
 
 # ---------- alerts ----------
-# Geofences are circles only (V1 scope cut -- see docs/adr or the Alerts
-# feature's own commit message): center + radius, keyboard/form
-# accessible without needing a map-drawing UI. Stored as a real PostGIS
-# polygon (ST_Buffer of the center point) so geofence_enter/exit
-# evaluation can use the same ST_Contains machinery a freeform polygon
-# would need anyway; the authoring center/radius are kept in `style` so
-# the UI can redisplay and re-edit them without reverse-engineering a
-# polygon back into a circle.
+# Geofences are either a circle (center + radius, keyboard/form
+# accessible without needing a map-drawing UI) or a freeform polygon
+# (map-drawn only -- see docs/adr/0008). Both are stored as a real
+# PostGIS polygon so geofence_enter/exit evaluation always uses the same
+# ST_Covers machinery regardless of shape; the authoring inputs (center/
+# radius, or the raw point list) are kept in `style` so the UI can
+# redisplay and re-edit them without reverse-engineering a polygon back
+# into its original shape.
 
 ALERT_RULE_TYPES = {"geofence_enter", "geofence_exit", "stale", "speed_above"}
 ALERT_TARGET_KINDS = {"all", "vessel", "watchlist"}
+GEOFENCE_SHAPES = {"circle", "polygon"}
 
 
 class GeofenceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    center_lon: float = Field(ge=-180, le=180)
-    center_lat: float = Field(ge=-90, le=90)
-    radius_m: float = Field(gt=0, le=500_000)
+    # Circle shape: set these three, leave polygon unset.
+    center_lon: Optional[float] = Field(default=None, ge=-180, le=180)
+    center_lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    radius_m: Optional[float] = Field(default=None, gt=0, le=500_000)
+    # Polygon shape: an open ring of >= 3 [lon, lat] pairs, leave the
+    # circle fields unset. The router rejects any request that supplies
+    # neither or both shapes.
+    polygon: Optional[list[list[float]]] = None
 
 
 class GeofenceOut(BaseModel):
     id: str
     name: str
-    center_lon: float
-    center_lat: float
-    radius_m: float
+    shape: str
+    center_lon: Optional[float]
+    center_lat: Optional[float]
+    radius_m: Optional[float]
+    polygon: Optional[list[list[float]]]
     enabled: bool
 
 
@@ -225,6 +234,11 @@ class AlertRuleCreate(BaseModel):
     cooldown_seconds: int = Field(default=1800, ge=60, le=86400)
     enabled: bool = True
     add_to_watchlist_id: Optional[str] = None
+    # Delivery channels, both optional and independent of each other and
+    # of the always-on in-app event log.
+    email_to: Optional[EmailStr] = None
+    webhook_url: Optional[str] = Field(default=None, max_length=500)
+    webhook_secret: Optional[str] = Field(default=None, max_length=200)
 
 
 class AlertRuleUpdate(BaseModel):
@@ -238,6 +252,14 @@ class AlertRuleUpdate(BaseModel):
     # so unlike name/cooldown_seconds/enabled this is not a "None means
     # leave unchanged" field -- None here means "clear the action".
     add_to_watchlist_id: Optional[str] = None
+    email_to: Optional[EmailStr] = None
+    webhook_url: Optional[str] = Field(default=None, max_length=500)
+    # Unlike email_to/webhook_url above, the real secret is never echoed
+    # back to the client (see AlertRuleOut), so this field can't follow
+    # the "always sent" convention those use -- None here means "leave
+    # the stored secret unchanged", same as DataSourceUpdate.api_key.
+    # Clearing webhook_url also clears any stored secret server-side.
+    webhook_secret: Optional[str] = Field(default=None, max_length=200)
 
 
 class AlertRuleOut(BaseModel):
@@ -249,6 +271,10 @@ class AlertRuleOut(BaseModel):
     cooldown_seconds: int
     enabled: bool
     add_to_watchlist_id: Optional[str]
+    email_to: Optional[str]
+    webhook_url: Optional[str]
+    has_webhook_secret: bool
+    webhook_secret_preview: Optional[str]
     event_count: int
 
 
@@ -266,3 +292,36 @@ class AlertEventOut(BaseModel):
 
 class AcknowledgeAllOut(BaseModel):
     acknowledged: int
+
+
+# ---------- smtp settings ----------
+
+
+class SmtpSettingsOut(BaseModel):
+    host: Optional[str]
+    port: int
+    username: Optional[str]
+    has_password: bool
+    password_preview: Optional[str]
+    from_address: Optional[str]
+    use_tls: bool
+    updated_at: datetime
+
+
+class SmtpSettingsUpdate(BaseModel):
+    """A full-replace PUT, same as RetentionSettingsUpdate -- the Admin
+    form always submits every field. The one exception is `password`:
+    since the real value is never echoed back (see SmtpSettingsOut), None
+    there means "leave the stored password unchanged", same convention as
+    DataSourceUpdate.api_key / AlertRuleUpdate.webhook_secret."""
+
+    host: Optional[str] = Field(default=None, max_length=255)
+    port: int = Field(ge=1, le=65535)
+    username: Optional[str] = Field(default=None, max_length=255)
+    password: Optional[str] = Field(default=None, max_length=500)
+    from_address: Optional[EmailStr] = None
+    use_tls: bool
+
+
+class SmtpTestEmailIn(BaseModel):
+    to: EmailStr

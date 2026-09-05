@@ -30,31 +30,38 @@ to its users (see the LICENSE file for the exact terms).
   just ones currently live or watchlisted) and review its track over a
   chosen window, with gaps drawn honestly — never bridged into a fake
   straight-line path.
-- **Alerts**: geofences (circles — draw on the map or enter coordinates,
-  your choice) and rules (enter/exit/stale/speed-above), each with a
-  cooldown and a target (all vessels / one vessel / a watchlist), firing
-  into an in-app event inbox with acknowledgment. A geofence rule can
-  stack an optional speed condition and a speed rule can stack an
-  optional geofence condition — e.g. "over 20kn inside this zone," not
-  just either alone. A rule can also auto-add every vessel it fires for
-  to a watchlist — e.g. a geofence_enter rule curates a "ships that
-  visited this port" list with no manual add-to-list step. Email/webhook
-  delivery and freeform polygon geofences aren't built.
+- **Alerts**: geofences (circles or freeform polygons — draw either on
+  the map, or enter coordinates for a circle) and rules
+  (enter/exit/stale/speed-above), each with a cooldown and a target (all
+  vessels / one vessel / a watchlist), firing into an in-app event inbox
+  with acknowledgment, plus optional email and/or signed-webhook
+  delivery (HMAC-SHA256, retried with backoff) — configured per rule,
+  with global SMTP settings under Admin. A geofence rule can stack an
+  optional speed condition and a speed rule can stack an optional
+  geofence condition — e.g. "over 20kn inside this zone," not just
+  either alone. A rule can also auto-add every vessel it fires for to a
+  watchlist — e.g. a geofence_enter rule curates a "ships that visited
+  this port" list with no manual add-to-list step.
 - **Admin**: add/edit/enable/disable data sources (Admin -> Data sources
   — no env vars or restart-by-hand needed), per-adapter-instance source
   health (message/error/reconnect counts, manual cleanup of stale rows),
-  and live-editable retention settings (how long position history is
-  kept for watchlisted vs. ordinary vessels) with a database-size/row-count
-  panel.
+  live-editable retention settings (how long position history is kept
+  for watchlisted vs. ordinary vessels) with a database-size/row-count
+  panel, and SMTP settings for alert email delivery (with a one-click
+  test send).
 - **Ingestion pipeline**: adapter → parse → normalize → dedupe → persist
   → publish, with a canonical event schema shared between the API and
   worker. Zero, one, or several sources can run concurrently, each
   configured from the app itself rather than fixed at container start;
   see [Data sources](#data-sources) below.
+- **`DEMO_MODE`**: an env flag that blocks every mutating action
+  (read-only, 403 both server-side and in the UI) so you can safely run
+  a public instance — see [Demo deployments](#demo-deployments) below.
 
 Not built: multi-tenant accounts (this is a single-operator, invite-free
-app — one admin login per deployment), a public/hosted demo, email or
-webhook alert delivery, freeform polygon geofences.
+app — one admin login per deployment) and a hosted/managed demo (running
+one yourself, safely, is what `DEMO_MODE` is for — the hosting itself,
+domain, TLS, is on you).
 
 ## Stack
 
@@ -95,6 +102,18 @@ command, even ones that only touch one service. Without it, Compose
 silently falls back to hardcoded defaults instead of erroring — a
 service can end up running with the wrong password or the simulator
 adapter instead of a real one, with no warning at all.
+
+## Demo deployments
+
+Set `DEMO_MODE=true` in `.env` to run a public, read-only instance: every
+mutating action (alert rules, geofences, watchlists, admin/SMTP
+settings) is blocked with a 403, both server-side and in the UI. This
+does **not** add anonymous access — visitors still need
+`BOOTSTRAP_ADMIN_EMAIL`/`PASSWORD`, so it's on you to decide whether and
+how to share that login. Hosting (domain, TLS, where it runs) is also on
+you — this flag only makes it safe to point people at once you've
+decided all that. See
+[docs/adr/0009-demo-mode.md](docs/adr/0009-demo-mode.md).
 
 ## Data sources
 

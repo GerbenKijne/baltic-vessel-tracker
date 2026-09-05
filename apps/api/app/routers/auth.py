@@ -59,7 +59,7 @@ async def login(
         samesite="lax",
     )
 
-    return UserOut(id=str(user.id), email=user.email, role=user.role)
+    return UserOut(id=str(user.id), email=user.email, role=user.role, demo_mode=settings.demo_mode)
 
 
 @router.post("/logout", dependencies=[Depends(require_csrf)])
@@ -77,4 +77,9 @@ async def logout(
 
 @router.get("/me", response_model=UserOut)
 async def me(current_user: User = Depends(get_current_user)) -> UserOut:
-    return UserOut(id=str(current_user.id), email=current_user.email, role=current_user.role)
+    return UserOut(
+        id=str(current_user.id),
+        email=current_user.email,
+        role=current_user.role,
+        demo_mode=settings.demo_mode,
+    )

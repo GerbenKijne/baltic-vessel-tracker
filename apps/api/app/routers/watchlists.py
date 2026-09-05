@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
-from ..deps import get_current_user, require_csrf
+from ..deps import get_current_user, require_csrf, require_write_access
 from ..models import User, Vessel, VesselLatest, Watchlist, WatchlistVessel
 from ..routers.vessels import freshness_for
 from ..schemas import (
@@ -24,6 +24,8 @@ from ..schemas import (
 )
 
 router = APIRouter(prefix="/api/v1/watchlists", tags=["watchlists"])
+
+_WRITE_GUARD = [Depends(require_csrf), Depends(require_write_access)]
 
 
 async def _get_owned_watchlist(
@@ -63,7 +65,7 @@ async def list_watchlists(
     ]
 
 
-@router.post("", response_model=WatchlistOut, dependencies=[Depends(require_csrf)])
+@router.post("", response_model=WatchlistOut, dependencies=_WRITE_GUARD)
 async def create_watchlist(
     body: WatchlistCreate,
     db: AsyncSession = Depends(get_db),
@@ -166,7 +168,7 @@ async def get_watchlist(
 
 
 @router.patch(
-    "/{watchlist_id}", response_model=WatchlistOut, dependencies=[Depends(require_csrf)]
+    "/{watchlist_id}", response_model=WatchlistOut, dependencies=_WRITE_GUARD
 )
 async def rename_watchlist(
     watchlist_id: str,
@@ -190,7 +192,7 @@ async def rename_watchlist(
 
 
 @router.delete(
-    "/{watchlist_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf)]
+    "/{watchlist_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=_WRITE_GUARD
 )
 async def delete_watchlist(
     watchlist_id: str,
@@ -206,7 +208,7 @@ async def delete_watchlist(
 @router.put(
     "/{watchlist_id}/vessels/{mmsi}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_csrf)],
+    dependencies=_WRITE_GUARD,
 )
 async def add_vessel_to_watchlist(
     watchlist_id: str,
@@ -238,7 +240,7 @@ async def add_vessel_to_watchlist(
 @router.delete(
     "/{watchlist_id}/vessels/{mmsi}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_csrf)],
+    dependencies=_WRITE_GUARD,
 )
 async def remove_vessel_from_watchlist(
     watchlist_id: str,
