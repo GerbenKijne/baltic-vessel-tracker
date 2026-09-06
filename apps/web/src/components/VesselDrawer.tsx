@@ -58,6 +58,7 @@ export function VesselDrawer({
   const detail = detailQuery.data;
 
   const lastSeenTime = vessel.observedAt ?? vessel.receivedAt;
+  const country = countryForMmsi(vessel.mmsi);
   const receivedDeltaMs = vessel.observedAt
     ? new Date(vessel.receivedAt).getTime() - new Date(vessel.observedAt).getTime()
     : null;
@@ -99,7 +100,7 @@ export function VesselDrawer({
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               <Freshness time={lastSeenTime} showAge />
               <span className="tag">
-                FLAG {(countryForMmsi(vessel.mmsi) ?? "Unknown").toUpperCase()}
+                {country ? `${country.flag} ${country.name.toUpperCase()}` : "FLAG UNKNOWN"}
               </span>
             </div>
           </div>
