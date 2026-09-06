@@ -33,6 +33,15 @@ function Unknown({ text = "Unknown" }: { text?: string }) {
   return <span className="unk">{text}</span>;
 }
 
+function mapDeepLink(vessel: WatchlistVessel): string {
+  const params = new URLSearchParams({ vessel: vessel.mmsi });
+  if (vessel.lat != null && vessel.lon != null) {
+    params.set("lat", String(vessel.lat));
+    params.set("lon", String(vessel.lon));
+  }
+  return `/map?${params.toString()}`;
+}
+
 function VesselTableRow({
   vessel,
   onRemove,
@@ -42,9 +51,23 @@ function VesselTableRow({
   onRemove: () => void;
   disabled: boolean;
 }) {
+  const navigate = useNavigate();
   const lastSeenTime = vessel.observed_at ?? vessel.received_at;
+  const goToMap = () => navigate(mapDeepLink(vessel));
   return (
-    <tr>
+    <tr
+      className="watchlist-vessel-row"
+      role="button"
+      tabIndex={0}
+      aria-label={`${vessel.name ?? vessel.mmsi} — view on map`}
+      onClick={goToMap}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          goToMap();
+        }
+      }}
+    >
       <td style={{ color: "var(--delayed)" }} aria-label="Starred">
         ★
       </td>
@@ -72,7 +95,14 @@ function VesselTableRow({
         <span className="sub">—</span>
       </td>
       <td>
-        <button className="chip" disabled={disabled} onClick={onRemove}>
+        <button
+          className="chip"
+          disabled={disabled}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+        >
           Remove
         </button>
       </td>
@@ -89,9 +119,23 @@ function VesselCard({
   onRemove: () => void;
   disabled: boolean;
 }) {
+  const navigate = useNavigate();
   const lastSeenTime = vessel.observed_at ?? vessel.received_at;
+  const goToMap = () => navigate(mapDeepLink(vessel));
   return (
-    <div className="card">
+    <div
+      className="card watchlist-vessel-card"
+      role="button"
+      tabIndex={0}
+      aria-label={`${vessel.name ?? vessel.mmsi} — view on map`}
+      onClick={goToMap}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          goToMap();
+        }
+      }}
+    >
       <div className="watchlists-card-header">
         <div className="name" style={{ fontSize: 13 }}>
           {vessel.name ?? "Unknown"}
@@ -128,7 +172,14 @@ function VesselCard({
         ))}
       </div>
       <div style={{ marginTop: 9 }}>
-        <button className="chip" disabled={disabled} onClick={onRemove}>
+        <button
+          className="chip"
+          disabled={disabled}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+        >
           Remove
         </button>
       </div>
@@ -145,11 +196,14 @@ export function WatchlistsPage() {
   const [renameValue, setRenameValue] = useState<string | null>(null);
   const [filterText, setFilterText] = useState("");
   const [sort, setSort] = useState<SortMode>("seen");
-  const [staleOnly, setStaleOnly] = useState(false);
   const [view, setView] = useState<ViewMode>("table");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  useBodyClassWhen("sheet-open", sidebarOpen);
+  // On mobile, with nothing selected there's nothing else to show -- the
+  // list of lists IS the main view rather than something hidden behind
+  // the toggle, so it renders open regardless of the toggle's own state.
+  const sidebarVisible = sidebarOpen || !selectedId;
+  useBodyClassWhen("sheet-open", sidebarVisible);
 
   const listsQuery = useQuery({ queryKey: ["watchlists"], queryFn: watchlistsApi.list });
   const detailQuery = useQuery({
@@ -247,11 +301,6 @@ export function WatchlistsPage() {
   const rows = useMemo(() => {
     if (!detail) return [];
     let l = detail.vessels.filter((v) => {
-      if (staleOnly) {
-        const time = v.observed_at ?? v.received_at;
-        const state = time ? freshnessForTime(time) : "dark";
-        if (state !== "stale" && state !== "dark") return false;
-      }
       if (!filterText) return true;
       const t = filterText.toLowerCase();
       return (v.name ?? "").toLowerCase().includes(t) || v.mmsi.includes(t);
@@ -267,7 +316,7 @@ export function WatchlistsPage() {
       l.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
     }
     return l;
-  }, [detail, filterText, sort, staleOnly]);
+  }, [detail, filterText, sort]);
 
   const rollup = useMemo(() => {
     const counts: Record<string, number> = { live: 0, delayed: 0, stale: 0, dark: 0 };
@@ -286,14 +335,16 @@ export function WatchlistsPage() {
         crumb={detail?.name}
         right={
           <>
-            <button
-              type="button"
-              className={`sidebar-toggle${sidebarOpen ? " open" : ""}`}
-              aria-expanded={sidebarOpen}
-              onClick={() => setSidebarOpen((v) => !v)}
-            >
-              {sidebarOpen ? "✕ Close" : "☰ Lists"}
-            </button>
+            {selectedId && (
+              <button
+                type="button"
+                className={`sidebar-toggle${sidebarOpen ? " open" : ""}`}
+                aria-expanded={sidebarOpen}
+                onClick={() => setSidebarOpen((v) => !v)}
+              >
+                {sidebarOpen ? "✕ Close" : "☰ Lists"}
+              </button>
+            )}
             <span className="mono" style={{ color: "var(--faint)", fontSize: 11 }}>
               no application cap
             </span>
@@ -301,7 +352,7 @@ export function WatchlistsPage() {
         }
       />
       <div className="body">
-        <aside className={`side${sidebarOpen ? " open" : ""}`} aria-label="Lists">
+        <aside className={`side${sidebarVisible ? " open" : ""}`} aria-label="Lists">
           <div className="ssect">
             <div className="eyebrow">Lists</div>
           </div>
@@ -457,13 +508,6 @@ export function WatchlistsPage() {
                       A–Z
                     </button>
                   </div>
-                  <button
-                    className="chip"
-                    aria-pressed={staleOnly}
-                    onClick={() => setStaleOnly((v) => !v)}
-                  >
-                    Stale &amp; dark only
-                  </button>
                   <div style={{ flex: 1 }} />
                   <span className="mono" style={{ color: "var(--faint)", fontSize: 11 }}>
                     {rows.length} shown
@@ -476,6 +520,16 @@ export function WatchlistsPage() {
                       Cards
                     </button>
                   </div>
+                  <button type="button" className="btn sm" onClick={() => navigate(`/map?watchlist=${detail.id}`)}>
+                    View on map
+                  </button>
+                  <button
+                    type="button"
+                    className="btn sm"
+                    onClick={() => navigate(`/history?watchlist=${detail.id}`)}
+                  >
+                    View history
+                  </button>
                   <details
                     className="overflow-menu"
                     open={menuOpen}
@@ -492,24 +546,6 @@ export function WatchlistsPage() {
                         }}
                       >
                         Rename
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          navigate(`/map?watchlist=${detail.id}`);
-                        }}
-                      >
-                        View on map
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          navigate(`/history?watchlist=${detail.id}`);
-                        }}
-                      >
-                        View history
                       </button>
                       <ConfirmButton
                         className="danger"

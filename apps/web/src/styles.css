@@ -199,6 +199,17 @@ button {
   flex: 1;
 }
 
+.navlink-dot {
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--stale);
+  box-shadow: 0 0 0 2px var(--bg0);
+}
+
 .main {
   display: flex;
   flex-direction: column;
@@ -1679,6 +1690,14 @@ table.t .unk {
   .history-toolbar {
     flex-wrap: wrap;
     height: auto;
+  }
+
+  /* The gap/observations table under the track map takes up too much of
+     a phone screen's height relative to the map it's explaining -- the
+     map and its hover tooltip already carry the same information for a
+     single point at a time. Desktop keeps it, there's room. */
+  .history-gaps {
+    display: none;
   }
 
   /* Admin's data-source table -> one card per source, via a CSS-only

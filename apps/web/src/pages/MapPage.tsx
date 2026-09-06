@@ -60,12 +60,30 @@ export function MapPage() {
   const [panelsOpen, setPanelsOpen] = useState(false);
   useBodyClassWhen("sheet-open", panelsOpen);
 
-  const [selectedMmsi, setSelectedMmsi] = useState<string | null>(null);
+  const [selectedMmsi, setSelectedMmsi] = useState<string | null>(searchParams.get("vessel"));
+  // One-shot camera target for a vessel deep link (from Watchlists' row
+  // click) that arrives with a known last position -- consumed by the
+  // focusBounds memo below on its first evaluation, same pattern as
+  // focusRequestedRef for a watchlist selection.
+  const deepLinkVesselPointRef = useRef<[number, number] | null>(
+    (() => {
+      const lat = Number(searchParams.get("lat"));
+      const lon = Number(searchParams.get("lon"));
+      return searchParams.get("vessel") && Number.isFinite(lat) && Number.isFinite(lon)
+        ? [lon, lat]
+        : null;
+    })()
+  );
   const [selectedWatchlistId, setSelectedWatchlistId] = useState<string | null>(
     searchParams.get("watchlist") ?? remembered?.selectedWatchlistId ?? null
   );
+  // Dark vessels (no observation recent enough to place with any
+  // confidence) are hidden by default -- otherwise they never leave the
+  // screen and bury the ones actually worth looking at. Only applies on
+  // a fresh session; once the user has touched the filter chips at all,
+  // whatever they left it as (including re-enabling "Dark") wins.
   const [freshnessFilter, setFreshnessFilter] = useState<Set<Freshness>>(
-    new Set(remembered?.freshnessFilter ?? [])
+    new Set(remembered?.freshnessFilter ?? (["live", "delayed", "stale"] as Freshness[]))
   );
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set(remembered?.typeFilter ?? []));
   const [watchlistOnly, setWatchlistOnly] = useState(remembered?.watchlistOnly ?? false);
@@ -79,10 +97,10 @@ export function MapPage() {
     remembered ? { center: remembered.center, zoom: remembered.zoom } : null
   );
 
-  // Deep-link param only sets initial state (from the Watchlists page's
-  // "View on map" link); clear it so it doesn't re-fire.
+  // Deep-link params only set initial state (from the Watchlists page's
+  // "View on map"/row-click links); clear them so they don't re-fire.
   useEffect(() => {
-    if (searchParams.has("watchlist")) {
+    if (searchParams.has("watchlist") || searchParams.has("vessel")) {
       setSearchParams({}, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -244,6 +262,11 @@ export function MapPage() {
   // click (focusRequestedRef) -- never for a selection merely restored
   // from a remembered session, which should leave the viewport alone.
   const focusBounds = useMemo(() => {
+    if (deepLinkVesselPointRef.current) {
+      const [lon, lat] = deepLinkVesselPointRef.current;
+      deepLinkVesselPointRef.current = null;
+      return [[lon, lat], [lon, lat]] as [[number, number], [number, number]];
+    }
     if (!selectedWatchlistId || !watchlistDetail || !focusRequestedRef.current) return null;
     focusRequestedRef.current = false;
     return boundsFromVessels(watchlistDetail.vessels);

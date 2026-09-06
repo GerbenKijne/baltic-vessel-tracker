@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 
 import { AuthProvider } from "./AuthContext";
 import { useTheme } from "./ThemeContext";
+import { alertEventsApi } from "./api/alertEvents";
 import { api } from "./api/client";
 import { AdminPage } from "./pages/AdminPage";
 import { AlertsPage } from "./pages/AlertsPage";
@@ -20,6 +21,15 @@ const SECTIONS = [
 
 function AppShell({ onLogout, demoMode }: { onLogout: () => void; demoMode: boolean }) {
   const { theme, toggleTheme } = useTheme();
+  // Same query key AlertsPage's default ("unacknowledged") view uses, so
+  // acknowledging an event there invalidates this badge too instead of
+  // it going stale until the next 15s poll.
+  const unacknowledgedQuery = useQuery({
+    queryKey: ["alert-events", "unacknowledged"],
+    queryFn: () => alertEventsApi.list(false),
+    refetchInterval: 15_000,
+  });
+  const hasUnacknowledgedAlerts = (unacknowledgedQuery.data?.length ?? 0) > 0;
   return (
     <div className={`app${demoMode ? " with-banner" : ""}`}>
       {demoMode && (
@@ -33,11 +43,16 @@ function AppShell({ onLogout, demoMode }: { onLogout: () => void; demoMode: bool
           <NavLink
             key={s.to}
             to={s.to}
-            title={s.label}
-            aria-label={s.label}
+            title={s.code === "AL" && hasUnacknowledgedAlerts ? `${s.label} (unread)` : s.label}
+            aria-label={s.code === "AL" && hasUnacknowledgedAlerts ? `${s.label} (unread)` : s.label}
             className={({ isActive }) => (isActive ? "on" : undefined)}
           >
-            <span>{s.code}</span>
+            <span className="navlink-icon">
+              {s.code}
+              {s.code === "AL" && hasUnacknowledgedAlerts && (
+                <i className="navlink-dot" aria-hidden="true" />
+              )}
+            </span>
           </NavLink>
         ))}
         <div className="sp" />

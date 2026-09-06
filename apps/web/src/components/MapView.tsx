@@ -19,7 +19,6 @@ const LAYER_ID = "vessel-markers";
 const SELECTION_SOURCE_ID = "vessel-selection";
 const SELECTION_LAYER_ID = "vessel-selection-ring";
 const LABEL_LAYER_ID = "vessel-labels";
-const HALO_LAYER_ID = "vessel-halo";
 const CLUSTER_LAYER_ID = "vessel-clusters";
 const CLUSTER_COUNT_LAYER_ID = "vessel-cluster-count";
 const NAMED_LABEL_MIN_ZOOM = 7;
@@ -31,14 +30,6 @@ const CLUSTER_MAX_ZOOM = 7;
 // shape, freshness, ...); a cluster's synthetic representative point
 // doesn't, so every vessel-specific layer must exclude it explicitly.
 const NOT_CLUSTER_FILTER: maplibregl.FilterSpecification = ["!", ["has", "point_count"]];
-
-function haloColorForTheme(theme: Theme): string {
-  // A halo whose lightness is the *opposite* of the basemap's makes a
-  // colored marker read as a distinct object rather than blending into
-  // whatever's under it -- a light glow against the dark basemap, a dark
-  // ring against the pale "positron" one.
-  return theme === "light" ? "rgba(10, 14, 18, 0.55)" : "rgba(255, 255, 255, 0.6)";
-}
 
 type Bounds = [[number, number], [number, number]];
 
@@ -223,28 +214,6 @@ export function MapView({
           "text-size": 11,
         },
         paint: { "text-color": "#edf0f3" },
-      });
-
-      // A halo behind each icon so it reads as a distinct marker rather
-      // than blending into the basemap underneath it -- same shape and
-      // rotation as the real icon, just bigger and tinted with a fixed,
-      // theme-contrasting color instead of the data-driven freshness one.
-      map.addLayer({
-        id: HALO_LAYER_ID,
-        type: "symbol",
-        source: SOURCE_ID,
-        filter: NOT_CLUSTER_FILTER,
-        layout: {
-          "icon-image": ["get", "icon"],
-          "icon-rotate": ["case", ["==", ["get", "shape"], "arrow"], ["get", "heading"], 0],
-          "icon-rotation-alignment": "map",
-          "icon-allow-overlap": true,
-          "icon-size": ["*", ["case", ["get", "isSelected"], 0.85, 0.6], 1.45],
-        },
-        paint: {
-          "icon-color": haloColorForTheme(theme),
-          "icon-opacity": ["case", ["get", "isDimmed"], 0.2, 0.85],
-        },
       });
 
       // Shape carries movement state (arrow=under way+oriented,

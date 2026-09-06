@@ -10,6 +10,7 @@ import { TrackMapView, type HoverPointInfo, type VesselTrackEntry } from "../com
 import { formatAge } from "../freshness";
 import { haversineNm } from "../geo";
 import { useTheme } from "../ThemeContext";
+import { useBodyClassWhen } from "../useBodyClass";
 
 type WindowMode = "24h" | "7d" | "custom";
 
@@ -58,6 +59,8 @@ export function HistoryPage() {
   const [customFrom, setCustomFrom] = useState(() => defaultCustomInput(24 * 3600 * 1000));
   const [customTo, setCustomTo] = useState(() => defaultCustomInput(0));
   const [hoverInfo, setHoverInfo] = useState<HoverPointInfo | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  useBodyClassWhen("sheet-open", sidebarOpen);
 
   // Deep-link params (from the Map page's ship-card "History" button and
   // the Watchlists page's "View history" button) only seed the initial
@@ -251,9 +254,22 @@ export function HistoryPage() {
 
   return (
     <>
-      <TopBar title="History" crumb={crumb} />
+      <TopBar
+        title="History"
+        crumb={crumb}
+        right={
+          <button
+            type="button"
+            className={`sidebar-toggle${sidebarOpen ? " open" : ""}`}
+            aria-expanded={sidebarOpen}
+            onClick={() => setSidebarOpen((v) => !v)}
+          >
+            {sidebarOpen ? "✕ Close" : "☰ Query"}
+          </button>
+        }
+      />
       <div className="body">
-        <aside className="side" aria-label="Query">
+        <aside className={`side${sidebarOpen ? " open" : ""}`} aria-label="Query">
           <div className="ssect">
             <label className="eyebrow" htmlFor="history-q">
               Add a vessel
