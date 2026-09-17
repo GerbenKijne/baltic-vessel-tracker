@@ -30,7 +30,9 @@ This should complete well within the PRD's 20-minute fresh-install target
 ## Exposing it beyond localhost
 
 The stack binds `web` to `WEB_PORT` (default 8090) with no TLS by default.
-To expose it on the internet:
+Three ways to expose it on the internet — pick one:
+
+**Option A: Caddy, your own domain's DNS pointed at the host's IP.**
 
 1. Point a domain's DNS at the host.
 2. Edit `infra/compose/Caddyfile`, replacing the placeholder `:80` block
@@ -38,10 +40,49 @@ To expose it on the internet:
 3. Start the `proxy` profile: `docker compose -f infra/compose/docker-compose.yml --env-file .env --profile proxy up -d`.
 4. Set `COOKIE_SECURE=true` in `.env` (the default) so session cookies
    require HTTPS.
+5. Forward ports 80/443 on your router to the host.
 
-Do not expose the stack to the internet without authentication configured
-(`BOOTSTRAP_ADMIN_EMAIL`/`BOOTSTRAP_ADMIN_PASSWORD` set) — see PRD SS15
-(security threat model), "unauthorized remote access."
+**Option B: Cloudflare Tunnel — no port forwarding, no host-facing TLS
+cert.** Needs a domain already on Cloudflare (its nameservers pointed at
+Cloudflare's, free plan is enough).
+
+1. Cloudflare dashboard → **Zero Trust** → **Networks** → **Tunnels** →
+   **Create a tunnel** → connector type **Cloudflared**. Name it (e.g.
+   `baltic-vessel-tracker`).
+2. On the "Install and run a connector" step, pick the Docker command
+   option and copy just the token — the long string after `--token` in
+   the command it shows you (do *not* run that command yourself; this
+   repo's compose file already runs `cloudflared` for you).
+3. Put that token in `.env`: `CLOUDFLARE_TUNNEL_TOKEN=<the token>`.
+4. Still in the tunnel's setup, go to **Public Hostname** → **Add a
+   public hostname**: pick your subdomain (e.g. `vessels.your-domain.example`),
+   type **HTTP**, URL **`web:80`** (the Docker service name/port — reachable
+   directly since `cloudflared` joins the same Compose network as `web`,
+   no host port involved).
+5. Start the `cloudflare` profile: `docker compose -f infra/compose/docker-compose.yml --env-file .env --profile cloudflare up -d`.
+6. Set `COOKIE_SECURE=true` in `.env` (the default) — Cloudflare
+   terminates TLS at its edge, so the app only ever sees HTTPS from a
+   visitor's point of view.
+7. Visit `https://vessels.your-domain.example`. No inbound firewall rule
+   or router port-forward needed anywhere in this path — `cloudflared`
+   only makes an outbound connection to Cloudflare.
+
+Both the Caddy and Cloudflare Tunnel services are optional Compose
+profiles and stay off unless you explicitly start them with `--profile`
+— a plain `up -d` never starts either one, so there's no risk of one
+half-configuring itself on a normal deploy/update.
+
+**Option C (Synology only):** use DSM's own reverse proxy — see the
+[Synology NAS](#synology-nas) section below.
+
+Whichever option you pick, do not expose the stack to the internet
+without authentication configured (`BOOTSTRAP_ADMIN_EMAIL`/
+`BOOTSTRAP_ADMIN_PASSWORD` set) — see PRD SS15 (security threat model),
+"unauthorized remote access." Consider also putting the tunnel hostname
+behind a [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/)
+policy (email OTP, Google/GitHub login, etc.) for a second layer in
+front of the app's own login — optional, but cheap extra hardening for
+anything reachable from the whole internet.
 
 ## Updating
 
@@ -52,6 +93,11 @@ docker compose -f infra/compose/docker-compose.yml --env-file .env up -d --build
 
 The `migrate` service re-runs on every `up`; Alembic migrations are
 idempotent (it's a no-op if already at `head`).
+
+If you've enabled the `proxy` or `cloudflare` profile, append the same
+`--profile` flag to this update command too — a plain `up` without it
+still leaves that service running, but won't pick up any change to its
+own config (e.g. a rotated `CLOUDFLARE_TUNNEL_TOKEN`).
 
 ## Switching adapters
 
@@ -141,9 +187,19 @@ binary is present depends on the Container Manager/Docker package version.
 
 ### 4. Exposing it beyond the LAN (optional)
 
-Skip this repo's Caddy profile on a Synology — DSM already has a mature
-reverse proxy with automatic Let's Encrypt certs, which is the more
-idiomatic fit here:
+Two good options on a Synology — pick based on whether you want to deal
+with router port-forwarding at all:
+
+**No port-forwarding: Cloudflare Tunnel.** See "Exposing it beyond
+localhost" → Option B above — works identically on a NAS, since it's
+just another Compose profile (`cloudflared`) joining the same Docker
+network as `web`. This is the simpler option if you don't already have
+DSM's reverse proxy set up for other services, since Cloudflare handles
+TLS and there's nothing to forward on your router.
+
+**Already using DSM's reverse proxy for other services:** skip this
+repo's Caddy profile — DSM already has a mature reverse proxy with
+automatic Let's Encrypt certs, which is the more idiomatic fit here:
 
 1. Control Panel → Login Portal → Advanced → Reverse Proxy → Create.
 2. Source: your chosen subdomain, HTTPS, port 443.
@@ -153,8 +209,8 @@ idiomatic fit here:
 5. Set `COOKIE_SECURE=true` in `.env` (the default) once it's served over
    HTTPS.
 
-Don't port-forward `WEB_PORT` directly from your router — go through
-DSM's reverse proxy so it's TLS-terminated.
+If you go this route, don't port-forward `WEB_PORT` directly from your
+router — go through DSM's reverse proxy so it's TLS-terminated.
 
 ### 5. Survives reboots?
 

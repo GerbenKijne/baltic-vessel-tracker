@@ -140,6 +140,28 @@ services:
     depends_on:
       - web
 
+  # Alternative to caddy/a host reverse proxy: an outbound-only tunnel to
+  # Cloudflare's edge, so nothing needs a forwarded port or a host-facing
+  # TLS cert -- Cloudflare terminates TLS and proxies straight to `web:80`
+  # over the internal Docker network. Enable with `--profile cloudflare`
+  # once CLOUDFLARE_TUNNEL_TOKEN is set (see .env.example and
+  # docs/runbooks/deploy.md). Disabled by default.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ["cloudflare"]
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      # Deliberately a plain fallback, not Compose's `:?required` syntax --
+      # that form is interpolated for every service at parse time, before
+      # profile filtering happens, so it would break a normal `up -d` with
+      # no --profile flag for everyone, not just cloudflared users. An
+      # empty token just makes this container exit with a clear error in
+      # its own logs when the cloudflare profile is actually enabled.
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - web
+
 volumes:
   postgres_data:
   redis_data:

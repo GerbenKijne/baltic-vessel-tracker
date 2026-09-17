@@ -74,7 +74,9 @@ domain, TLS, is on you).
   for why alert evaluation ended up here instead of a separate
   `workers/alerts` service, which was the original plan)
 - `packages/contracts` — shared canonical event schema (Python + TypeScript)
-- PostgreSQL 16 + PostGIS, Redis (streams + cache), optional Caddy TLS proxy
+- PostgreSQL 16 + PostGIS, Redis (streams + cache), optional Caddy TLS
+  proxy or Cloudflare Tunnel for exposing it beyond localhost (see
+  [docs/runbooks/deploy.md](docs/runbooks/deploy.md))
 
 ## Running it locally
 
