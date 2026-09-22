@@ -1,0 +1,12 @@
+// Cloudflare Workers config for deploying the landing page
+// (apps/landing/) as static assets -- no server-side Worker code, this
+// is a pure static site. Cloudflare's Git-connected deploy runs from the
+// repo root by default, hence the "directory" path below instead of a
+// dashboard "root directory" override.
+{
+  "name": "baltic-vessel-tracker",
+  "compatibility_date": "2026-09-22",
+  "assets": {
+    "directory": "apps/landing"
+  }
+}
