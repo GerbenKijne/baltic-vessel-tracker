@@ -407,6 +407,9 @@ h2.center { text-align: center; max-width: 640px; margin: 0 auto; }
 .footer-links a { text-decoration: none; color: var(--dim); }
 .footer-links a:hover { color: var(--txt); }
 .disclaimer { font-size: 11.5px; color: var(--faint); max-width: 72ch; margin: 0; }
+.colophon { font-size: 11.5px; color: var(--faint); margin: 10px 0 0; }
+.colophon a { color: var(--dim); text-decoration: underline; text-underline-offset: 2px; }
+.colophon a:hover { color: var(--txt); }
 
 /* --- Responsive --- */
 @media (max-width: 900px) {
