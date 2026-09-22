@@ -84,6 +84,56 @@ policy (email OTP, Google/GitHub login, etc.) for a second layer in
 front of the app's own login — optional, but cheap extra hardening for
 anything reachable from the whole internet.
 
+## Hosted demo
+
+A second, independent instance for people to try without touching your
+real one — same repo, same compose file, a different Compose **project
+name** and **env file** so containers/volumes/networks never collide
+with your main stack on the same host.
+
+1. `cp .env.demo.example .env.demo` and fill it in — it's mostly
+   pre-filled with sensible demo defaults (see the file's own comments).
+   The one thing worth deciding deliberately: `BOOTSTRAP_ADMIN_EMAIL`/
+   `BOOTSTRAP_ADMIN_PASSWORD` here are meant to be **public** — this is
+   the login you'll put on the landing page, not a secret.
+2. Bring it up with `-p` to give it its own namespace:
+   ```bash
+   docker compose -p baltic-tracker-demo -f infra/compose/docker-compose.yml \
+     --env-file .env.demo up -d --build
+   ```
+   This creates its own `postgres`/`redis`/volumes/network, fully
+   separate from your main instance — a fresh database, seeded (per the
+   normal fresh-install migration) with only the built-in `simulator`
+   data source. There's no way for it to end up running against your
+   real AISStream feed or key: nothing in `.env.demo` references either,
+   and DEMO_MODE (below) blocks adding a new data source anyway.
+3. **One-time only, before sharing the URL:** the app starts empty
+   (no watchlists, no alert rules) — a visitor's first impression
+   shouldn't be a blank page. With `DEMO_MODE=false` temporarily (edit
+   `.env.demo`, `up -d` again to apply), sign in with the bootstrap
+   admin login and create a sample watchlist or two (e.g. add a few of
+   the simulator's own vessels) and maybe one alert rule, so the demo
+   shows a populated, working app. Then set `DEMO_MODE=true` in
+   `.env.demo` and `up -d` once more to lock it back down.
+4. Route a second hostname to it through your **existing** Cloudflare
+   Tunnel — this reuses the same tunnel/connector from "Exposing it
+   beyond localhost" → Option B, it does *not* need a second
+   `cloudflared` or a second tunnel token. In the Cloudflare dashboard,
+   the same tunnel → **Public Hostname** → **Add a public hostname**:
+   pick a subdomain (e.g. `demo.your-domain.example`), type **HTTP**,
+   URL **`http://<host-LAN-IP>:8091`** (the demo's own `WEB_PORT`,
+   reached over the LAN this time, not `web:80` — the demo stack is a
+   *different* Compose project with its own internal network, so the
+   `cloudflared` connector on the main stack's network can't resolve
+   its `web` by container name, only by the host's published port).
+5. Visit `https://demo.your-domain.example`, sign in with the public
+   demo login, confirm every mutating action (add to watchlist, new
+   alert rule, etc.) is blocked.
+
+Updating the demo later is the same `up -d --build` command from
+"Updating" below, with `-p baltic-tracker-demo --env-file .env.demo` in
+place of the main stack's flags.
+
 ## Updating
 
 ```bash

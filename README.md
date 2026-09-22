@@ -14,6 +14,16 @@ Licensed under [AGPL-3.0](LICENSE) — if you run a modified version of
 this as a network service, you must make your changes' source available
 to its users (see the LICENSE file for the exact terms).
 
+## Landing page & demo
+
+`apps/landing/` is a static, no-build marketing page (`index.html` +
+`styles.css`, no framework) meant for Cloudflare Pages: connect this repo,
+set **Build output directory** to `apps/landing` and leave the build
+command empty. It links to a separate hosted demo instance — see
+[docs/runbooks/deploy.md](docs/runbooks/deploy.md), "Hosted demo," for how
+that second, read-only Compose stack is set up alongside a real
+deployment.
+
 ## What's built
 
 - **Live map** (MapLibre GL JS): vessel markers with heading-rotated

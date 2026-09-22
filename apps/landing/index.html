@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Baltic Vessel Tracker</title>
+  <meta name="description" content="A self-hosted, open-source AIS vessel tracker for the Baltic Sea — live map, unlimited watchlists, alerts, and history. No 5-ship cap, no subscription, your own server." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2218%22 fill=%22%230e131a%22/><path d=%22M50 20 L72 62 L50 52 L28 62 Z%22 fill=%22%238fe388%22/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <header class="topnav">
+    <div class="wrap topnav-inner">
+      <a class="brandmark" href="#top" aria-label="Baltic Vessel Tracker">
+        <svg width="20" height="20" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 14 L78 68 L50 56 L22 68 Z" fill="currentColor"/></svg>
+        <span>Baltic Vessel Tracker</span>
+      </a>
+      <nav class="topnav-links">
+        <a href="#features">Features</a>
+        <a href="#self-hosted">Why self-hosted</a>
+        <a href="#try-it">Try it</a>
+        <a class="btn ghost" href="https://github.com/GerbenKijne/baltic-vessel-tracker">GitHub</a>
+        <a class="btn primary" href="https://demo.kijne.eu">Try the demo</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+
+    <!-- ============ HERO ============ -->
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">Open source · self-hosted · AGPL-3.0</p>
+          <h1>Track every vessel in the Baltic. <span class="accent-live">No 5-ship cap.</span></h1>
+          <p class="lede">
+            Commercial AIS trackers meter free accounts at five watched vessels
+            and lock history behind a paywall. This one runs on hardware you
+            already own — a NAS, a spare server, a laptop — and watches as many
+            vessels as you want, for as long as you want, with your data staying
+            on your own disk.
+          </p>
+          <div class="hero-ctas">
+            <a class="btn primary lg" href="https://demo.kijne.eu">Try the live demo →</a>
+            <a class="btn ghost lg" href="https://github.com/GerbenKijne/baltic-vessel-tracker">View source on GitHub</a>
+          </div>
+          <p class="hero-note">No signup for the demo — a shared read-only login, right below.</p>
+        </div>
+
+        <div class="hero-visual" role="img" aria-label="Screenshot of the live map: vessel markers colored by data freshness, a search and filter panel, and a vessel detail drawer showing a ship's position, speed, and course.">
+          <div class="mock">
+            <div class="mock-toolbar">
+              <span class="mock-dot mock-dot--live"></span>
+              <span class="mock-dot mock-dot--amber"></span>
+              <span class="mock-dot mock-dot--red"></span>
+              <span class="mock-url">ais.your-domain.example</span>
+            </div>
+            <div class="mock-body">
+              <div class="mock-rail">
+                <div class="mock-rail-brand">BVT</div>
+                <div class="mock-rail-item is-active">MA</div>
+                <div class="mock-rail-item">WL</div>
+                <div class="mock-rail-item">AL</div>
+                <div class="mock-rail-item">HI</div>
+              </div>
+              <div class="mock-map">
+                <svg class="mock-coast" viewBox="0 0 640 380" preserveAspectRatio="none" aria-hidden="true">
+                  <path d="M0,40 C60,70 40,120 90,140 C140,160 120,200 170,210 C230,225 240,270 300,280 C360,290 380,330 420,340 L420,380 L0,380 Z" />
+                  <path d="M640,0 L640,120 C600,140 610,90 570,80 C530,70 540,30 500,20 L500,0 Z" />
+                  <path d="M120,0 L150,10 L140,40 L110,30 Z" />
+                  <path d="M330,60 L355,75 L340,100 L315,85 Z" />
+                </svg>
+
+                <div class="mock-panel mock-search">
+                  <div class="mock-input">Search name, MMSI, or IMO</div>
+                  <div class="mock-chips">
+                    <span class="chip on">Live only</span>
+                    <span class="chip">Delayed</span>
+                    <span class="chip">Stale</span>
+                    <span class="chip">Dark</span>
+                  </div>
+                </div>
+
+                <svg class="mock-vessel v1" viewBox="0 0 20 20"><path d="M10 1 L18 18 L10 14 L2 18 Z" fill="var(--m-live)"/></svg>
+                <svg class="mock-vessel v2" viewBox="0 0 20 20"><path d="M10 1 L18 18 L10 14 L2 18 Z" fill="var(--m-live)"/></svg>
+                <svg class="mock-vessel v3 selected" viewBox="0 0 20 20"><circle cx="10" cy="10" r="9.5" class="ring"/><path d="M10 1 L18 18 L10 14 L2 18 Z" fill="var(--m-live)"/></svg>
+                <svg class="mock-vessel v4" viewBox="0 0 20 20"><rect x="4" y="4" width="12" height="12" fill="var(--m-amber)"/></svg>
+                <svg class="mock-vessel v5" viewBox="0 0 20 20"><path d="M10 1 L18 18 L10 14 L2 18 Z" fill="var(--m-red)"/></svg>
+                <svg class="mock-vessel v6" viewBox="0 0 20 20"><path d="M10 1 L18 18 L10 14 L2 18 Z" fill="var(--m-live)"/></svg>
+
+                <div class="mock-panel mock-legend">
+                  <div class="mock-legend-row"><span class="dot" style="background:var(--m-live)"></span>Live</div>
+                  <div class="mock-legend-row"><span class="dot" style="background:var(--m-amber)"></span>Delayed</div>
+                  <div class="mock-legend-row"><span class="dot" style="background:var(--m-red)"></span>Stale</div>
+                </div>
+              </div>
+
+              <div class="mock-drawer">
+                <div class="mock-drawer-title">SS GOTLAND TRADER</div>
+                <div class="mock-drawer-tags">
+                  <span class="fx"><i></i>Live 8s</span>
+                  <span class="tag">🇸🇪 SWEDEN</span>
+                </div>
+                <div class="mock-btn-row">
+                  <div class="mock-btn-pri">★ Add to watchlist</div>
+                  <div class="mock-btn-sec">History</div>
+                </div>
+                <div class="mock-kv"><span>MMSI</span><b>265123002</b></div>
+                <div class="mock-kv"><span>Position</span><b>58.88° N 17.62° E</b></div>
+                <div class="mock-kv"><span>SOG</span><b>11.1 kn</b></div>
+                <div class="mock-kv"><span>COG</span><b>148.6°</b></div>
+                <div class="mock-kv"><span>Nav status</span><b>Under way</b></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ STATS STRIP ============ -->
+    <section class="stats">
+      <div class="wrap stats-row">
+        <div class="stat"><b>Unlimited</b><span>watched vessels, not five</span></div>
+        <div class="stat"><b>100%</b><span>self-hosted, your data stays put</span></div>
+        <div class="stat"><b>AGPL-3.0</b><span>free, open, forkable</span></div>
+        <div class="stat"><b>$0</b><span>to run — Docker Compose, one host</span></div>
+      </div>
+    </section>
+
+    <!-- ============ FEATURES ============ -->
+    <section id="features" class="features">
+      <div class="wrap">
+        <p class="eyebrow center">Features</p>
+        <h2 class="center">Everything a harbor watcher actually needs</h2>
+        <div class="feature-grid">
+          <article class="feature">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24"><path d="M12 2 L22 20 L12 15 L2 20 Z" fill="currentColor"/></svg>
+            </div>
+            <h3>Live map, clustered</h3>
+            <p>MapLibre-rendered positions, colour-coded by data freshness, with native clustering that breaks apart as you zoom in on a harbor.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+            </div>
+            <h3>Unlimited watchlists</h3>
+            <p>Group vessels by route, port, or interest — no per-account cap, with table and card views, plus CSV/GeoJSON import and export.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="6"/><path d="M12 15v6M9 21h6"/></svg>
+            </div>
+            <h3>Geofence &amp; alerts</h3>
+            <p>Circle or polygon geofences, speed thresholds, and stale-signal rules — fire on entry, exit, or a threshold cross, with per-rule cooldowns.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24"><path d="M4 20 L4 12 L10 8 L16 13 L20 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <h3>History &amp; track playback</h3>
+            <p>Query any vessel ever seen over a 24h/7d/custom window — a real drawn track with gaps left honest, never bridged into a false straight line.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12h8M8 8h8M8 16h5"/></svg>
+            </div>
+            <h3>Pluggable ingestion</h3>
+            <p>Ships with an AISStream adapter and a traffic simulator for trying it out with zero setup; the adapter interface is small enough to add your own.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a13 13 0 0 1 0 18a13 13 0 0 1 0-18Z"/></svg>
+            </div>
+            <h3>Runs anywhere Docker does</h3>
+            <p>One Compose file — a NAS, a $5 VPS, or your own machine. PostgreSQL/PostGIS and Redis, no managed cloud service required.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ WHY SELF-HOSTED ============ -->
+    <section id="self-hosted" class="why">
+      <div class="wrap why-grid">
+        <div>
+          <p class="eyebrow">Why self-hosted</p>
+          <h2>Your fleet, your server, your rules</h2>
+          <p class="body-lg">
+            Free tiers on commercial AIS platforms exist to sell you the paid
+            tier — a hard cap on tracked vessels, history windows measured in
+            hours, and a login that answers to someone else's terms of
+            service. None of that is a technical limitation of AIS data
+            itself; it's a business model.
+          </p>
+          <p class="body-lg">
+            Baltic Vessel Tracker has no accounts to sell you, because it has
+            no business model — it's AGPL-3.0 licensed, so it stays that way
+            for anyone who runs or forks it. You bring the AIS feed (a free
+            AISStream.io key covers most of the Baltic) and the hardware;
+            the app does the parsing, dedup, storage, and the map.
+          </p>
+        </div>
+        <ul class="checklist">
+          <li>No vessel-count limit, ever</li>
+          <li>History retention you set yourself</li>
+          <li>Runs fully offline from any third-party API except your AIS feed</li>
+          <li>Every line of the ingestion pipeline is inspectable</li>
+          <li>No telemetry phoning home</li>
+          <li>Fork it, rebrand it, point it at a different sea entirely</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ TECH STACK ============ -->
+    <section class="stack">
+      <div class="wrap">
+        <p class="eyebrow center">Under the hood</p>
+        <div class="stack-pills">
+          <span class="pill">React + TypeScript</span>
+          <span class="pill">MapLibre GL JS</span>
+          <span class="pill">FastAPI</span>
+          <span class="pill">PostgreSQL + PostGIS</span>
+          <span class="pill">Redis Streams</span>
+          <span class="pill">Docker Compose</span>
+          <span class="pill">Alembic</span>
+          <span class="pill">TanStack Query</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TRY IT ============ -->
+    <section id="try-it" class="tryit">
+      <div class="wrap tryit-card">
+        <div class="tryit-copy">
+          <p class="eyebrow">Try it now</p>
+          <h2>A live demo, seeded with simulated traffic</h2>
+          <p class="body-lg">
+            The demo runs the built-in traffic simulator, not a real AIS feed —
+            fake, moving vessels, clearly labelled as such in the app itself.
+            It's in demo mode: every mutating action (new watchlists, alert
+            rules, admin settings) is blocked with a clear message, so feel
+            free to click everything.
+          </p>
+          <a class="btn primary lg" href="https://demo.kijne.eu">Open the demo →</a>
+        </div>
+        <div class="tryit-login">
+          <p class="eyebrow">Shared demo login</p>
+          <div class="cred-row"><span>Email</span><code>demo@example.com</code></div>
+          <div class="cred-row"><span>Password</span><code>sail-the-baltic</code></div>
+          <p class="tryit-note">Read-only — shared by everyone trying the demo.</p>
+        </div>
+      </div>
+
+      <div class="wrap">
+        <div class="selfhost-card">
+          <div>
+            <p class="eyebrow">Prefer your own instance?</p>
+            <h3>Self-host it in about 20 minutes</h3>
+            <p>Docker + Docker Compose, one <code>.env</code> file, one command. Full walkthrough — including a Synology NAS section and how to expose it publicly with a Cloudflare Tunnel — is in the repo.</p>
+          </div>
+          <a class="btn ghost lg" href="https://github.com/GerbenKijne/baltic-vessel-tracker/blob/main/docs/runbooks/deploy.md">Read the deploy guide →</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-row">
+      <div class="footer-brand">
+        <svg width="16" height="16" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 14 L78 68 L50 56 L22 68 Z" fill="currentColor"/></svg>
+        <span>Baltic Vessel Tracker</span>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/GerbenKijne/baltic-vessel-tracker">GitHub</a>
+        <a href="https://github.com/GerbenKijne/baltic-vessel-tracker/blob/main/LICENSE">AGPL-3.0 license</a>
+        <a href="https://github.com/GerbenKijne/baltic-vessel-tracker/blob/main/docs/runbooks/deploy.md">Deploy guide</a>
+      </div>
+    </div>
+    <div class="wrap">
+      <p class="disclaimer">Not for navigation. Positions may be delayed, incomplete, duplicated, spoofed, or incorrect — this is a hobby project built on public AIS data, not a certified nautical instrument.</p>
+    </div>
+  </footer>
+
+</body>
+</html>
